@@ -325,36 +325,92 @@ def clean_json_string(raw):
     return raw
 
 
+def parse_json_results(raw):
+    """Intenta parsear el JSON; si está truncado, rescata los objetos completos."""
+    raw = clean_json_string(raw)
+
+    # Intento 1: parseo completo
+    try:
+        results = json.loads(raw)
+        return results if isinstance(results, list) else [results]
+    except json.JSONDecodeError:
+        pass
+
+    # Intento 2: cerrar JSON truncado — añadir }] al final y reintentar
+    for suffix in ["}]", "}]}]", "]"]:
+        try:
+            results = json.loads(raw + suffix)
+            return results if isinstance(results, list) else [results]
+        except json.JSONDecodeError:
+            pass
+
+    # Intento 3: extraer objetos completos uno a uno
+    # Busca llaves balanceadas para no cortar campos a medias
+    results = []
+    depth = 0
+    start = None
+    for i, ch in enumerate(raw):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                fragment = raw[start:i+1]
+                fragment = clean_json_string(fragment)
+                try:
+                    results.append(json.loads(fragment))
+                except json.JSONDecodeError:
+                    pass
+                start = None
+    if results:
+        return results
+
+    raise ValueError(
+        f"No se pudo parsear la respuesta de Gemini.\n"
+        f"Intenta reducir el número de resultados o vuelve a buscar.\n\n"
+        f"Fragmento recibido:\n{raw[:300]}"
+    )
+
+
 def run_search(topic, regiones, tipos, audiencias, condiciones, accesos, n):
     excluidas = load_existing_memberships()
     prompt = build_prompt(topic, regiones, tipos, audiencias, condiciones, accesos, n, excluidas)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
+
+    # Calcular tokens necesarios: ~400 tokens por resultado + margen
+    needed_tokens = max(8192, n * 500 + 2000)
+
     response = model.generate_content(
         prompt,
-        generation_config=genai.types.GenerationConfig(temperature=0.3, max_output_tokens=8192)
+        generation_config=genai.types.GenerationConfig(
+            temperature=0.3,
+            max_output_tokens=needed_tokens
+        )
     )
     raw = response.text.strip()
-    raw = clean_json_string(raw)
 
+    # Detectar respuesta truncada por finish_reason
+    finish = None
     try:
-        results = json.loads(raw)
-        if not isinstance(results, list):
-            results = [results]
-        return results
-    except json.JSONDecodeError:
-        # Segundo intento: parseo objeto por objeto con regex
-        objects = re.findall(r'\{[^{}]*\}', raw, re.DOTALL)
-        results = []
-        for obj in objects:
-            obj = clean_json_string(obj)
-            try:
-                results.append(json.loads(obj))
-            except json.JSONDecodeError:
-                continue
-        if results:
-            return results
-        raise ValueError(f"No se pudo parsear la respuesta de Gemini.\n\nFragmento recibido:\n{raw[:400]}")
+        finish = response.candidates[0].finish_reason.name
+    except Exception:
+        pass
+
+    results = parse_json_results(raw)
+
+    # Si vino truncada y recuperamos menos resultados de los pedidos, avisar en sesión
+    if finish == "MAX_TOKENS" and len(results) < n:
+        st.session_state["truncated_warning"] = (
+            f"⚠️ Gemini truncó la respuesta ({len(results)} de {n} resultados recuperados). "
+            "Intenta pedir menos resultados o pulsa 🔄 Nuevos resultados."
+        )
+    else:
+        st.session_state.pop("truncated_warning", None)
+
+    return results
 
 
 def render_stars(score):
@@ -608,6 +664,10 @@ if st.session_state.results:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
+
+    # Mostrar advertencia de truncado si aplica
+    if st.session_state.get("truncated_warning"):
+        st.warning(st.session_state["truncated_warning"])
 
     render_results(results)
 
