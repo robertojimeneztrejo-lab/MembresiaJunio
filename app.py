@@ -3,6 +3,8 @@ import google.generativeai as genai
 import json
 import re
 import io
+import requests
+import pandas as pd
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, PatternFill
@@ -142,9 +144,44 @@ html, body, [data-testid="stAppViewContainer"] {
 # ── API Key desde Secrets ─────────────────────────────────────────────────────
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
+# ── Google Sheets — lista de exclusión ───────────────────────────────────────
+SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmA6CzuX4HnRv_gfKHdZB4GcezxNGq0g5nUY7OkFyEbPeYfkSbMgeSg7O20WoqPs-YRVF0qVc3AdRA/pub?output=csv"
+
+@st.cache_data(ttl=300)
+def load_existing_memberships():
+    """Lee membresías ya obtenidas desde Google Sheets (refresca cada 5 min)."""
+    try:
+        df = pd.read_csv(SHEETS_CSV_URL, header=None)
+        nombres = df.iloc[:, 0].dropna().astype(str).str.strip().tolist()
+        if nombres and nombres[0].lower() in ["nombre", "name", "membresía", "membresia", "plataforma"]:
+            nombres = nombres[1:]
+        return [n for n in nombres if n]
+    except Exception:
+        return []
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 🔍 ARIA\n### Membresías Gratuitas")
+    st.markdown("---")
+
+    # Indicador de lista de exclusión
+    excluidas_preview = load_existing_memberships()
+    n_exc = len(excluidas_preview)
+    if n_exc > 0:
+        st.markdown(
+            f'''<div style="background:#1a1a1a;border:1px solid #F5E642;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;">
+            <div style="font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:#F5E642;font-weight:700;margin-bottom:3px;">📋 Lista de exclusión</div>
+            <div style="font-size:0.82rem;color:#D0CDBE;"><strong style="color:#F5E642;">{n_exc}</strong> membresías ya obtenidas serán excluidas automáticamente</div>
+            </div>''',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;">' +
+            '<div style="font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:#666;font-weight:700;margin-bottom:3px;">📋 Lista de exclusión</div>' +
+            '<div style="font-size:0.82rem;color:#888;">Sin datos o cargando...</div></div>',
+            unsafe_allow_html=True
+        )
     st.markdown("---")
 
     st.markdown("### 📊 Resultados")
@@ -224,7 +261,7 @@ def build_filters_summary():
     return regiones, tipos, audiencias, condiciones, accesos
 
 
-def build_prompt(topic, regiones, tipos, audiencias, condiciones, accesos, n):
+def build_prompt(topic, regiones, tipos, audiencias, condiciones, accesos, n, excluidas=None):
     return f"""Eres un agente especializado en inteligencia de recursos académicos y profesionales. Tu función es identificar, evaluar y catalogar plataformas web que ofrecen membresías, suscripciones o accesos institucionales COMPLETAMENTE GRATUITOS para el sector educativo y de investigación.
 
 TEMA DE BÚSQUEDA: {topic if topic else "herramientas y recursos académicos generales"}
@@ -255,6 +292,8 @@ REGLAS OBLIGATORIAS:
 6. Nunca inventes URLs. Si no puedes verificar un dato, usa "Sin verificar".
 7. No incluyas contenido detrás de login previo que no sea descubrible públicamente.
 8. Ordena los resultados de mayor a menor puntuación (5 a 1).
+9. NUNCA repitas las siguientes membresías que ya han sido obtenidas previamente (lista de exclusión):
+{{EXCLUSION_BLOCK}}
 
 FORMATO DE RESPUESTA: Responde ÚNICAMENTE con un array JSON válido, sin texto adicional, sin bloques de código markdown. El array debe tener exactamente {n} objetos:
 
@@ -272,11 +311,12 @@ FORMATO DE RESPUESTA: Responde ÚNICAMENTE con un array JSON válido, sin texto 
     "url_verificada": true,
     "duracion": "12 meses / 1 año / Indefinida mientras seas estudiante"
   }}
-]"""
+]""".replace("{{EXCLUSION_BLOCK}}", ("\n".join(f"- {e}" for e in excluidas) if excluidas else "ninguna por ahora"))
 
 
 def run_search(topic, regiones, tipos, audiencias, condiciones, accesos, n):
-    prompt = build_prompt(topic, regiones, tipos, audiencias, condiciones, accesos, n)
+    excluidas = load_existing_memberships()
+    prompt = build_prompt(topic, regiones, tipos, audiencias, condiciones, accesos, n, excluidas)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
     response = model.generate_content(
