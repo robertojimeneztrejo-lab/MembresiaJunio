@@ -314,6 +314,17 @@ FORMATO DE RESPUESTA: Responde ÚNICAMENTE con un array JSON válido, sin texto 
 ]""".replace("{{EXCLUSION_BLOCK}}", ("\n".join(f"- {e}" for e in excluidas) if excluidas else "ninguna por ahora"))
 
 
+def clean_json_string(raw):
+    raw = re.sub(r"```json", "", raw)
+    raw = re.sub(r"```", "", raw).strip()
+    raw = re.sub(r",\s*([}\]])", r"\1", raw)
+    raw = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", raw)
+    m = re.search(r"\[.*\]", raw, re.DOTALL)
+    if m:
+        raw = m.group()
+    return raw
+
+
 def run_search(topic, regiones, tipos, audiencias, condiciones, accesos, n):
     excluidas = load_existing_memberships()
     prompt = build_prompt(topic, regiones, tipos, audiencias, condiciones, accesos, n, excluidas)
@@ -324,19 +335,26 @@ def run_search(topic, regiones, tipos, audiencias, condiciones, accesos, n):
         generation_config=genai.types.GenerationConfig(temperature=0.3, max_output_tokens=8192)
     )
     raw = response.text.strip()
-    raw = re.sub(r"```json\s*", "", raw)
-    raw = re.sub(r"```\s*", "", raw).strip()
+    raw = clean_json_string(raw)
+
     try:
         results = json.loads(raw)
         if not isinstance(results, list):
             results = [results]
+        return results
     except json.JSONDecodeError:
-        match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if match:
-            results = json.loads(match.group())
-        else:
-            raise ValueError(f"No se pudo parsear la respuesta: {raw[:300]}")
-    return results
+        # Segundo intento: parseo objeto por objeto con regex
+        objects = re.findall(r'\{[^{}]*\}', raw, re.DOTALL)
+        results = []
+        for obj in objects:
+            obj = clean_json_string(obj)
+            try:
+                results.append(json.loads(obj))
+            except json.JSONDecodeError:
+                continue
+        if results:
+            return results
+        raise ValueError(f"No se pudo parsear la respuesta de Gemini.\n\nFragmento recibido:\n{raw[:400]}")
 
 
 def render_stars(score):
