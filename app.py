@@ -146,7 +146,7 @@ api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 # ── Google Sheets URLs ───────────────────────────────────────────────────────
 SHEETS_CSV_URL    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmA6CzuX4HnRv_gfKHdZB4GcezxNGq0g5nUY7OkFyEbPeYfkSbMgeSg7O20WoqPs-YRVF0qVc3AdRA/pub?output=csv"
-APPS_SCRIPT_URL   = "https://script.google.com/macros/s/AKfycby-AfeStXZD4QF06uwEzpY3ZAG-8DyDABTYNohhoSdcYdf8dwDgK48W_K-Ou3ugp2WRCw/exec"
+APPS_SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxWfJrZB1Q1IpBaH0nLOebv5C6PFZRm2BqChM-EQRS6xjgsBYnuE7A82hgQCi-0kdHiMA/exec"
 
 @st.cache_data(ttl=60)
 def load_existing_memberships():
@@ -162,41 +162,31 @@ def load_existing_memberships():
 
 
 def save_to_sheets(results):
-    """Envía los nombres al Apps Script siguiendo redirecciones de Google."""
+    """Envía los nombres al Apps Script via GET (más compatible con Google)."""
     try:
         nombres = [r.get("nombre", "").strip() for r in results if r.get("nombre", "").strip()]
         if not nombres:
             return False, "Sin nombres para guardar"
 
-        # Apps Script requiere seguir redirecciones manualmente con POST→GET
-        # Google redirige el POST a una URL distinta; hay que hacer GET con params
-        resp = requests.post(
-            APPS_SCRIPT_URL,
-            json={"nombres": nombres},
-            timeout=20,
-            allow_redirects=True,
-            headers={"Content-Type": "application/json"}
-        )
+        import urllib.parse
+        nombres_encoded = urllib.parse.quote(json.dumps(nombres, ensure_ascii=False))
+        url = f"{APPS_SCRIPT_URL}?nombres={nombres_encoded}"
 
-        # Si la respuesta está vacía o es HTML (página de error de Google)
+        resp = requests.get(url, timeout=25, allow_redirects=True)
         raw = resp.text.strip()
-        if not raw or raw.startswith("<!"):
-            # Segundo intento: GET con nombres como parámetro JSON en query string
-            import urllib.parse
-            params = {"nombres": json.dumps(nombres)}
-            resp2 = requests.get(APPS_SCRIPT_URL, params=params, timeout=20)
-            raw = resp2.text.strip()
 
-        if not raw or raw.startswith("<!"):
-            return False, "Apps Script no respondió con JSON. Verifica que esté desplegado como Web App pública."
+        if not raw:
+            return False, "Respuesta vacía del servidor"
+        if raw.startswith("<!"):
+            return False, "El Apps Script devolvió HTML. Asegúrate de desplegarlo con acceso: 'Cualquier persona'."
 
         data = json.loads(raw)
         if data.get("status") == "ok":
             return True, data.get("added", 0)
         return False, data.get("message", "Error desconocido")
 
-    except json.JSONDecodeError as ex:
-        return False, f"Respuesta inesperada del servidor: {str(ex)}"
+    except json.JSONDecodeError:
+        return False, f"Respuesta no JSON: {resp.text[:200]}"
     except Exception as ex:
         return False, str(ex)
 
