@@ -169,7 +169,9 @@ def save_to_sheets(results):
             return False, "Sin nombres para guardar"
 
         import urllib.parse
-        nombres_encoded = urllib.parse.quote(json.dumps(nombres, ensure_ascii=False))
+        # Enviar lista de objetos {nombre, url} en lugar de solo nombres
+        payload = [{"nombre": r.get("nombre","").strip(), "url": r.get("url","").strip()} for r in results if r.get("nombre","").strip()]
+        nombres_encoded = urllib.parse.quote(json.dumps(payload, ensure_ascii=False))
         url = f"{APPS_SCRIPT_URL}?nombres={nombres_encoded}"
 
         resp = requests.get(url, timeout=25, allow_redirects=True)
