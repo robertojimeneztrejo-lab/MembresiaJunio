@@ -162,20 +162,41 @@ def load_existing_memberships():
 
 
 def save_to_sheets(results):
-    """Envía los nombres de los resultados al Apps Script para guardarlos en el Sheet."""
+    """Envía los nombres al Apps Script siguiendo redirecciones de Google."""
     try:
         nombres = [r.get("nombre", "").strip() for r in results if r.get("nombre", "").strip()]
         if not nombres:
             return False, "Sin nombres para guardar"
+
+        # Apps Script requiere seguir redirecciones manualmente con POST→GET
+        # Google redirige el POST a una URL distinta; hay que hacer GET con params
         resp = requests.post(
             APPS_SCRIPT_URL,
             json={"nombres": nombres},
-            timeout=15
+            timeout=20,
+            allow_redirects=True,
+            headers={"Content-Type": "application/json"}
         )
-        data = resp.json()
+
+        # Si la respuesta está vacía o es HTML (página de error de Google)
+        raw = resp.text.strip()
+        if not raw or raw.startswith("<!"):
+            # Segundo intento: GET con nombres como parámetro JSON en query string
+            import urllib.parse
+            params = {"nombres": json.dumps(nombres)}
+            resp2 = requests.get(APPS_SCRIPT_URL, params=params, timeout=20)
+            raw = resp2.text.strip()
+
+        if not raw or raw.startswith("<!"):
+            return False, "Apps Script no respondió con JSON. Verifica que esté desplegado como Web App pública."
+
+        data = json.loads(raw)
         if data.get("status") == "ok":
             return True, data.get("added", 0)
         return False, data.get("message", "Error desconocido")
+
+    except json.JSONDecodeError as ex:
+        return False, f"Respuesta inesperada del servidor: {str(ex)}"
     except Exception as ex:
         return False, str(ex)
 
