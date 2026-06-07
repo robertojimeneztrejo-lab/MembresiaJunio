@@ -12,132 +12,201 @@ from openpyxl.utils import get_column_letter
 
 st.set_page_config(
     page_title="ARIA Membresías",
-    page_icon="🔍",
+    page_icon="🎓",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@300;400;500;600&display=swap');
 
 :root {
-    --canary: #F5E642;
-    --canary-dark: #D4C800;
-    --ink: #0F0F0F;
-    --ink-soft: #2A2A2A;
-    --surface: #F9F8F2;
-    --muted: #6B6860;
-    --border: #D8D5C8;
+    --navy:        #0D2B4E;
+    --navy-mid:    #1A3F6F;
+    --navy-light:  #2E5FA3;
+    --gold:        #C8973A;
+    --gold-light:  #E8B84B;
+    --surface:     #F4F6F9;
+    --white:       #FFFFFF;
+    --text:        #1A1F2E;
+    --text-soft:   #3D4A5C;
+    --muted:       #6B7A8D;
+    --border:      #C8D0DC;
+    --border-light:#DDE3EC;
 }
 
 html, body, [data-testid="stAppViewContainer"] {
     background-color: var(--surface) !important;
-    font-family: 'DM Sans', sans-serif;
-    color: var(--ink);
+    font-family: 'Source Sans 3', sans-serif;
+    color: var(--text);
 }
 
 [data-testid="stSidebar"] {
-    background-color: var(--ink) !important;
-    border-right: 3px solid var(--canary);
+    background: linear-gradient(180deg, #0D2B4E 0%, #0A2240 100%) !important;
+    border-right: 3px solid var(--gold) !important;
 }
-
-[data-testid="stSidebar"] * { color: #F0EDDE !important; }
-
-[data-testid="stSidebar"] .stMarkdown h2,
+[data-testid="stSidebar"] * { color: #C8D8EC !important; }
+[data-testid="stSidebar"] .stMarkdown h2 {
+    font-family: 'Libre Baskerville', serif !important;
+    color: #FFFFFF !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.05em !important;
+}
 [data-testid="stSidebar"] .stMarkdown h3 {
-    font-family: 'Syne', sans-serif !important;
-    color: var(--canary) !important;
+    font-family: 'Source Sans 3', sans-serif !important;
+    color: var(--gold-light) !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
 }
+[data-testid="stSidebar"] hr { border-color: #1E4070 !important; }
+.stCheckbox label { font-size: 0.82rem !important; font-family: 'Source Sans 3', sans-serif !important; }
+[data-testid="stSidebar"] .stCheckbox label,
+[data-testid="stSidebar"] .stCheckbox label p { color: #A8BECE !important; }
 
-.stCheckbox label { font-size: 0.82rem !important; font-family: 'DM Sans', sans-serif !important; }
-[data-testid="stSidebar"] .stCheckbox label { color: #D0CDBE !important; }
-[data-testid="stSidebar"] .stCheckbox label p { color: #D0CDBE !important; }
-
-.main-header {
-    font-family: 'Syne', sans-serif;
-    font-size: 2.8rem;
-    font-weight: 800;
-    color: var(--ink);
-    line-height: 1.05;
-    letter-spacing: -0.03em;
+.inst-header {
+    background: linear-gradient(135deg, #0D2B4E 0%, #1A3F6F 60%, #2E5FA3 100%);
+    border-radius: 10px;
+    padding: 1.6rem 2rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 4px solid var(--gold);
+    box-shadow: 0 4px 20px rgba(13,43,78,0.18);
 }
-.main-header span { background: var(--canary); padding: 0 6px; display: inline-block; }
-.subtitle { font-size: 1rem; color: var(--muted); font-weight: 300; margin-top: 0.4rem; margin-bottom: 1.5rem; }
-
-.result-card {
-    background: white;
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1rem;
-    position: relative;
-    overflow: hidden;
+.inst-header-left { display: flex; align-items: center; gap: 1.2rem; }
+.inst-logo {
+    width: 52px; height: 52px;
+    background: rgba(255,255,255,0.08);
+    border: 2px solid var(--gold);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; flex-shrink: 0;
 }
-.result-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0;
-    width: 4px; height: 100%;
-    background: var(--canary);
+.inst-title {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 1.7rem; font-weight: 700;
+    color: #FFFFFF; letter-spacing: 0.04em; line-height: 1.1;
 }
-.result-card:hover { border-color: var(--canary-dark); }
+.inst-title span { color: var(--gold-light); }
+.inst-subtitle {
+    font-size: 0.75rem; color: #8BAAC8;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px;
+}
+.inst-badge {
+    background: rgba(200,151,58,0.12);
+    border: 1px solid rgba(200,151,58,0.4);
+    border-radius: 6px; padding: 0.5rem 1rem; text-align: right;
+}
+.inst-badge-label { font-size: 0.62rem; color: #8BAAC8; text-transform: uppercase; letter-spacing: 0.1em; }
+.inst-badge-value { font-size: 0.82rem; color: var(--gold-light); font-weight: 600; margin-top: 2px; }
 
-.card-title { font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--ink); margin-bottom: 0.2rem; }
-.card-url { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.8rem; word-break: break-all; }
-.card-url a { color: #1a73e8; text-decoration: none; }
-.card-section-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.25rem; margin-top: 0.7rem; }
-.card-text { font-size: 0.88rem; color: var(--ink-soft); line-height: 1.55; }
-
-.badge { font-size: 0.72rem; font-weight: 500; padding: 3px 10px; border-radius: 20px; font-family: 'DM Sans', sans-serif; }
-.badge-type-academica { background: #EBF8FF; color: #1A6B99; border: 1px solid #BEE3F8; }
-.badge-type-profesional { background: #F0FFF4; color: #22543D; border: 1px solid #9AE6B4; }
-.badge-type-comercial { background: #FFFBEB; color: #7B4F12; border: 1px solid #F6D860; }
-.badge-type-comunidad { background: #FAF5FF; color: #553C9A; border: 1px solid #D6BCFA; }
-.badge-region { background: #F7FAFC; color: #2D3748; border: 1px solid #CBD5E0; }
-.badge-access { background: #F0FFF4; color: #276749; border: 1px solid #9AE6B4; }
-
-.stars { font-size: 1rem; color: var(--canary-dark); letter-spacing: 1px; }
-.stars-empty { color: #D8D5C8; }
+.stTextInput input {
+    border: 1.5px solid var(--border) !important;
+    border-radius: 6px !important;
+    font-family: 'Source Sans 3', sans-serif !important;
+    font-size: 0.95rem !important;
+    background: var(--white) !important;
+    color: var(--text) !important;
+}
+.stTextInput input:focus {
+    border-color: var(--navy-light) !important;
+    box-shadow: 0 0 0 3px rgba(46,95,163,0.12) !important;
+}
 
 .stButton > button {
-    background: var(--canary) !important;
-    color: var(--ink) !important;
-    font-family: 'Syne', sans-serif !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.04em !important;
-    border: 2px solid var(--ink) !important;
+    background: var(--navy) !important;
+    color: #FFFFFF !important;
+    font-family: 'Source Sans 3', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+    border: 1.5px solid var(--navy-light) !important;
     border-radius: 6px !important;
-    padding: 0.5rem 1.5rem !important;
     transition: all 0.15s !important;
 }
-.stButton > button:hover { background: var(--ink) !important; color: var(--canary) !important; }
+.stButton > button:hover {
+    background: var(--navy-light) !important;
+    border-color: var(--gold) !important;
+}
 
 .status-bar {
-    background: var(--ink);
-    color: var(--canary);
-    font-family: 'Syne', sans-serif;
-    font-size: 0.78rem;
-    font-weight: 600;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
+    background: var(--navy);
+    color: var(--gold-light);
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.78rem; font-weight: 600;
+    padding: 0.45rem 1rem;
+    border-radius: 5px;
+    border-left: 3px solid var(--gold);
     letter-spacing: 0.06em;
-    margin-bottom: 1.2rem;
+    margin-bottom: 1rem;
     display: inline-block;
 }
 
-.empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.95rem; }
-.empty-icon { font-size: 2.5rem; margin-bottom: 0.8rem; display: block; }
+.result-card {
+    background: var(--white);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 0.9rem;
+    position: relative; overflow: hidden;
+    box-shadow: 0 1px 4px rgba(13,43,78,0.07);
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+.result-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 4px; height: 100%;
+    background: linear-gradient(180deg, var(--gold) 0%, var(--navy-light) 100%);
+}
+.result-card:hover {
+    box-shadow: 0 4px 16px rgba(13,43,78,0.13);
+    border-color: var(--navy-light);
+}
+.card-title {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 1rem; font-weight: 700; color: var(--navy); margin-bottom: 0.15rem;
+}
+.card-url { font-size: 0.77rem; color: var(--muted); margin-bottom: 0.7rem; word-break: break-all; }
+.card-url a { color: var(--navy-light); text-decoration: none; }
+.card-url a:hover { text-decoration: underline; }
+.card-section-title {
+    font-size: 0.65rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--muted); margin-bottom: 0.2rem; margin-top: 0.65rem;
+    border-bottom: 1px solid var(--border-light); padding-bottom: 2px;
+}
+.card-text { font-size: 0.87rem; color: var(--text-soft); line-height: 1.55; }
 
-.verified-badge { display: inline-block; font-size: 0.68rem; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
-.verified-ok { background: #F0FFF4; color: #276749; border: 1px solid #9AE6B4; }
-.verified-no { background: #FFF5F5; color: #9B2C2C; border: 1px solid #FEB2B2; }
-.verified-unk { background: #F7FAFC; color: #4A5568; border: 1px solid #CBD5E0; }
+.badge { font-size: 0.7rem; font-weight: 600; padding: 2px 9px; border-radius: 3px; font-family: 'Source Sans 3', sans-serif; }
+.badge-type-academica  { background: #E8F0FA; color: #1A3F6F; border: 1px solid #B8CEE8; }
+.badge-type-profesional{ background: #E8F5EE; color: #1A5232; border: 1px solid #A9D6BC; }
+.badge-type-comercial  { background: #FDF3E3; color: #7D4E0F; border: 1px solid #E8C88A; }
+.badge-type-comunidad  { background: #F2EEF9; color: #4A2D8A; border: 1px solid #C5B3E8; }
+.badge-region { background: #F0F3F8; color: #2D3D52; border: 1px solid #C0CBDA; }
+.badge-access { background: #E8F5EE; color: #1A5232; border: 1px solid #A9D6BC; }
+
+.stars       { font-size: 0.95rem; color: var(--gold); letter-spacing: 1px; }
+.stars-empty { font-size: 0.95rem; color: var(--border); letter-spacing: 1px; }
+
+.verified-badge { display: inline-block; font-size: 0.65rem; padding: 2px 7px; border-radius: 3px; margin-left: 8px; vertical-align: middle; font-weight: 600; }
+.verified-ok  { background: #E8F5EE; color: #1A5232; border: 1px solid #A9D6BC; }
+.verified-no  { background: #FBEAEA; color: #7B1E1E; border: 1px solid #E8AAAA; }
+.verified-unk { background: #F0F3F8; color: #3D4A5C; border: 1px solid #C0CBDA; }
+
+.empty-state {
+    text-align: center; padding: 3.5rem 1rem;
+    color: var(--muted); font-size: 0.95rem;
+    background: var(--white);
+    border: 1px dashed var(--border);
+    border-radius: 8px; margin-top: 1rem;
+}
+.empty-icon { font-size: 2.2rem; margin-bottom: 0.8rem; display: block; opacity: 0.5; }
 
 [data-testid="stSidebar"] .stSelectbox label,
-[data-testid="stSidebar"] .stNumberInput label { color: #D0CDBE !important; font-size: 0.82rem !important; }
-
-.action-row { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; align-items: center; }
+[data-testid="stSidebar"] .stNumberInput label { color: #A8BECE !important; font-size: 0.82rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -194,7 +263,7 @@ def save_to_sheets(results):
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🔍 ARIA\n### Membresías Gratuitas")
+    st.markdown("## 🎓 ARIA\n### Filtros de Búsqueda")
     st.markdown("---")
 
     # Indicador de lista de exclusión
@@ -627,11 +696,20 @@ def build_excel(results, topic):
 
 
 # ── Main UI ───────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="main-header">
-    ARIA<br><span>Membresías</span><br>Gratuitas
+st.markdown(f"""
+<div class="inst-header">
+    <div class="inst-header-left">
+        <div class="inst-logo">🎓</div>
+        <div>
+            <div class="inst-title">ARIA <span>Membresías</span></div>
+            <div class="inst-subtitle">Sistema de Inteligencia de Recursos Académicos Gratuitos</div>
+        </div>
+    </div>
+    <div class="inst-badge">
+        <div class="inst-badge-label">Versión</div>
+        <div class="inst-badge-value">1.0 · Acceso Abierto</div>
+    </div>
 </div>
-<div class="subtitle">Inteligencia de recursos académicos y profesionales — acceso sin costo</div>
 """, unsafe_allow_html=True)
 
 topic_col, btn_col = st.columns([4, 1])
@@ -721,7 +799,7 @@ if st.session_state.results:
 else:
     st.markdown("""
     <div class="empty-state">
-        <span class="empty-icon">◈</span>
+        <span class="empty-icon">🎓</span>
         Configura los filtros en el panel lateral y escribe un tema para comenzar.<br>
         <span style="font-size:0.82rem; color:#9E9B90;">Los filtros siempre están visibles — ajústalos antes de cada búsqueda.</span>
     </div>
