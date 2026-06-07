@@ -238,8 +238,17 @@ def save_to_sheets(results):
             return False, "Sin nombres para guardar"
 
         import urllib.parse
-        # Enviar lista de objetos {nombre, url} en lugar de solo nombres
-        payload = [{"nombre": r.get("nombre","").strip(), "url": r.get("url","").strip()} for r in results if r.get("nombre","").strip()]
+        # Enviar lista de objetos completos al Sheet
+        payload = [
+            {
+                "nombre": r.get("nombre","").strip(),
+                "url":    r.get("url","").strip(),
+                "region": r.get("region","").strip(),
+                "tipo":   r.get("tipo_membresia","").strip(),
+                "tema":   (st.session_state.get("last_topic","") or "General").strip()
+            }
+            for r in results if r.get("nombre","").strip()
+        ]
         nombres_encoded = urllib.parse.quote(json.dumps(payload, ensure_ascii=False))
         url = f"{APPS_SCRIPT_URL}?nombres={nombres_encoded}"
 
