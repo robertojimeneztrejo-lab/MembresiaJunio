@@ -144,12 +144,13 @@ html, body, [data-testid="stAppViewContainer"] {
 # ── API Key desde Secrets ─────────────────────────────────────────────────────
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-# ── Google Sheets — lista de exclusión ───────────────────────────────────────
-SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmA6CzuX4HnRv_gfKHdZB4GcezxNGq0g5nUY7OkFyEbPeYfkSbMgeSg7O20WoqPs-YRVF0qVc3AdRA/pub?output=csv"
+# ── Google Sheets URLs ───────────────────────────────────────────────────────
+SHEETS_CSV_URL    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmA6CzuX4HnRv_gfKHdZB4GcezxNGq0g5nUY7OkFyEbPeYfkSbMgeSg7O20WoqPs-YRVF0qVc3AdRA/pub?output=csv"
+APPS_SCRIPT_URL   = "https://script.google.com/macros/s/AKfycby-AfeStXZD4QF06uwEzpY3ZAG-8DyDABTYNohhoSdcYdf8dwDgK48W_K-Ou3ugp2WRCw/exec"
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_existing_memberships():
-    """Lee membresías ya obtenidas desde Google Sheets (refresca cada 5 min)."""
+    """Lee membresías ya obtenidas desde Google Sheets (refresca cada 60 seg)."""
     try:
         df = pd.read_csv(SHEETS_CSV_URL, header=None)
         nombres = df.iloc[:, 0].dropna().astype(str).str.strip().tolist()
@@ -158,6 +159,25 @@ def load_existing_memberships():
         return [n for n in nombres if n]
     except Exception:
         return []
+
+
+def save_to_sheets(results):
+    """Envía los nombres de los resultados al Apps Script para guardarlos en el Sheet."""
+    try:
+        nombres = [r.get("nombre", "").strip() for r in results if r.get("nombre", "").strip()]
+        if not nombres:
+            return False, "Sin nombres para guardar"
+        resp = requests.post(
+            APPS_SCRIPT_URL,
+            json={"nombres": nombres},
+            timeout=15
+        )
+        data = resp.json()
+        if data.get("status") == "ok":
+            return True, data.get("added", 0)
+        return False, data.get("message", "Error desconocido")
+    except Exception as ex:
+        return False, str(ex)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -644,7 +664,7 @@ if st.session_state.results:
     results = st.session_state.results
 
     # Barra de acciones
-    col_status, col_regen, col_excel = st.columns([3, 1.2, 1.2])
+    col_status, col_regen, col_excel, col_save = st.columns([2.5, 1.2, 1.2, 1.2])
     with col_status:
         st.markdown(
             f'<div class="status-bar">✦ {len(results)} membresías gratuitas encontradas</div>',
@@ -664,6 +684,20 @@ if st.session_state.results:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
+    with col_save:
+        if st.button("💾 Guardar en Sheet", use_container_width=True):
+            with st.spinner("Guardando en Google Sheets..."):
+                ok, info = save_to_sheets(results)
+            if ok:
+                added = info if isinstance(info, int) else 0
+                if added > 0:
+                    st.success(f"✓ {added} nuevas membresías guardadas")
+                else:
+                    st.info("Todas ya estaban en el Sheet")
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.error(f"Error al guardar: {info}")
 
     # Mostrar advertencia de truncado si aplica
     if st.session_state.get("truncated_warning"):
