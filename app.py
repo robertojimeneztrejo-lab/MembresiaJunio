@@ -362,6 +362,13 @@ with st.sidebar:
     tipo_partner         = st.checkbox("Partner", value=True)
 
     st.markdown("---")
+    st.markdown("### ⭐ Palabras clave prioritarias")
+    st.caption("Si aparecen en el nombre, Gemini les dará prioridad")
+    keyword_selections = {}
+    for kw in KEYWORD_OPTIONS:
+        keyword_selections[kw] = st.checkbox(kw, value=True)
+
+    st.markdown("---")
     st.markdown("### 🔓 Condición de gratuidad")
     cond_total  = st.checkbox("Gratuidad total", value=True)
     cond_edu    = st.checkbox("Student Tier (.edu / dominio univ.)", value=True)
@@ -379,12 +386,6 @@ with st.sidebar:
     acc_invitacion= st.checkbox("Invitación / Aprobación previa", value=True)
     acc_personal  = st.checkbox("Cuenta personal validada", value=True)
 
-    st.markdown("---")
-    st.markdown("### ⭐ Palabras clave prioritarias")
-    st.caption("Si aparecen en el nombre, Gemini les dará prioridad")
-    keyword_selections = {}
-    for kw in KEYWORD_OPTIONS:
-        keyword_selections[kw] = st.checkbox(kw, value=True)
 
 
 # ── Helpers de filtros ───────────────────────────────────────────────────────
