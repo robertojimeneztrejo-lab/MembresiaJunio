@@ -5,9 +5,10 @@ import re
 import io
 import requests
 import pandas as pd
+import urllib.parse
 from datetime import datetime
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, PatternFill
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 st.set_page_config(
@@ -34,6 +35,10 @@ st.markdown("""
     --muted:       #6B7A8D;
     --border:      #C8D0DC;
     --border-light:#DDE3EC;
+    --green:       #1A5232;
+    --green-bg:    #E8F5EE;
+    --red:         #7B1E1E;
+    --red-bg:      #FBEAEA;
 }
 
 html, body, [data-testid="stAppViewContainer"] {
@@ -65,6 +70,8 @@ html, body, [data-testid="stAppViewContainer"] {
 .stCheckbox label { font-size: 0.82rem !important; font-family: 'Source Sans 3', sans-serif !important; }
 [data-testid="stSidebar"] .stCheckbox label,
 [data-testid="stSidebar"] .stCheckbox label p { color: #A8BECE !important; }
+[data-testid="stSidebar"] .stRadio label,
+[data-testid="stSidebar"] .stRadio label p { color: #A8BECE !important; }
 
 .inst-header {
     background: linear-gradient(135deg, #0D2B4E 0%, #1A3F6F 60%, #2E5FA3 100%);
@@ -165,6 +172,10 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: 0 4px 16px rgba(13,43,78,0.13);
     border-color: var(--navy-light);
 }
+.result-card.approved::before { background: var(--green); }
+.result-card.rejected::before { background: var(--red); }
+.result-card.rejected { opacity: 0.6; }
+
 .card-title {
     font-family: 'Libre Baskerville', serif;
     font-size: 1rem; font-weight: 700; color: var(--navy); margin-bottom: 0.15rem;
@@ -181,19 +192,24 @@ html, body, [data-testid="stAppViewContainer"] {
 .card-text { font-size: 0.87rem; color: var(--text-soft); line-height: 1.55; }
 
 .badge { font-size: 0.7rem; font-weight: 600; padding: 2px 9px; border-radius: 3px; font-family: 'Source Sans 3', sans-serif; }
-.badge-type-academica  { background: #E8F0FA; color: #1A3F6F; border: 1px solid #B8CEE8; }
-.badge-type-profesional{ background: #E8F5EE; color: #1A5232; border: 1px solid #A9D6BC; }
-.badge-type-comercial  { background: #FDF3E3; color: #7D4E0F; border: 1px solid #E8C88A; }
-.badge-type-comunidad  { background: #F2EEF9; color: #4A2D8A; border: 1px solid #C5B3E8; }
+.badge-type-institucional { background: #E8F0FA; color: #1A3F6F; border: 1px solid #B8CEE8; }
+.badge-type-corporativa   { background: #FDF3E3; color: #7D4E0F; border: 1px solid #E8C88A; }
+.badge-type-individual    { background: #F2EEF9; color: #4A2D8A; border: 1px solid #C5B3E8; }
+.badge-type-organizacional{ background: #EAF3F7; color: #2D5A6E; border: 1px solid #B8DCE8; }
+.badge-type-academica     { background: #E8F0FA; color: #1A3F6F; border: 1px solid #B8CEE8; }
+.badge-type-student       { background: #E8F5EE; color: #1A5232; border: 1px solid #A9D6BC; }
+.badge-type-researchers   { background: #F5EFE3; color: #6B4A1F; border: 1px solid #DEC79A; }
+.badge-type-partner       { background: #FDEDF0; color: #8A1F3D; border: 1px solid #E8AFC0; }
 .badge-region { background: #F0F3F8; color: #2D3D52; border: 1px solid #C0CBDA; }
 .badge-access { background: #E8F5EE; color: #1A5232; border: 1px solid #A9D6BC; }
+.badge-priority { background: var(--gold); color: #FFFFFF; border: 1px solid var(--gold-light); }
 
 .stars       { font-size: 0.95rem; color: var(--gold); letter-spacing: 1px; }
 .stars-empty { font-size: 0.95rem; color: var(--border); letter-spacing: 1px; }
 
 .verified-badge { display: inline-block; font-size: 0.65rem; padding: 2px 7px; border-radius: 3px; margin-left: 8px; vertical-align: middle; font-weight: 600; }
-.verified-ok  { background: #E8F5EE; color: #1A5232; border: 1px solid #A9D6BC; }
-.verified-no  { background: #FBEAEA; color: #7B1E1E; border: 1px solid #E8AAAA; }
+.verified-ok  { background: var(--green-bg); color: var(--green); border: 1px solid #A9D6BC; }
+.verified-no  { background: var(--red-bg); color: var(--red); border: 1px solid #E8AAAA; }
 .verified-unk { background: #F0F3F8; color: #3D4A5C; border: 1px solid #C0CBDA; }
 
 .empty-state {
@@ -207,15 +223,25 @@ html, body, [data-testid="stAppViewContainer"] {
 
 [data-testid="stSidebar"] .stSelectbox label,
 [data-testid="stSidebar"] .stNumberInput label { color: #A8BECE !important; font-size: 0.82rem !important; }
+
+div[data-testid="stRadio"] > label { display: none; }
+
+.contact-input input {
+    border: 1.5px solid var(--border-light) !important;
+    border-radius: 5px !important;
+    font-size: 0.82rem !important;
+    padding: 0.35rem 0.6rem !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # ── API Key desde Secrets ─────────────────────────────────────────────────────
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-# ── Google Sheets URLs ───────────────────────────────────────────────────────
-SHEETS_CSV_URL    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmA6CzuX4HnRv_gfKHdZB4GcezxNGq0g5nUY7OkFyEbPeYfkSbMgeSg7O20WoqPs-YRVF0qVc3AdRA/pub?output=csv"
-APPS_SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxWfJrZB1Q1IpBaH0nLOebv5C6PFZRm2BqChM-EQRS6xjgsBYnuE7A82hgQCi-0kdHiMA/exec"
+# ── Google Sheets URLs ────────────────────────────────────────────────────────
+SHEETS_CSV_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmA6CzuX4HnRv_gfKHdZB4GcezxNGq0g5nUY7OkFyEbPeYfkSbMgeSg7O20WoqPs-YRVF0qVc3AdRA/pub?output=csv"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxWfJrZB1Q1IpBaH0nLOebv5C6PFZRm2BqChM-EQRS6xjgsBYnuE7A82hgQCi-0kdHiMA/exec"
+
 
 @st.cache_data(ttl=60)
 def load_existing_memberships():
@@ -230,25 +256,31 @@ def load_existing_memberships():
         return []
 
 
-def save_to_sheets(results):
-    """Envía los nombres al Apps Script via GET (más compatible con Google)."""
+def save_to_sheets(results, decisions):
+    """Envía los resultados (con su decisión aprobado/rechazado y correo) al Apps Script."""
     try:
-        nombres = [r.get("nombre", "").strip() for r in results if r.get("nombre", "").strip()]
-        if not nombres:
-            return False, "Sin nombres para guardar"
+        payload = []
+        for idx, r in enumerate(results):
+            nombre = r.get("nombre", "").strip()
+            if not nombre:
+                continue
+            decision = decisions.get(idx, {})
+            estatus = decision.get("estatus", "Pendiente")
+            correo = decision.get("correo", "").strip() if estatus == "Aprobado" else ""
 
-        import urllib.parse
-        # Enviar lista de objetos completos al Sheet
-        payload = [
-            {
-                "nombre": r.get("nombre","").strip(),
-                "url":    r.get("url","").strip(),
-                "region": r.get("region","").strip(),
-                "tipo":   r.get("tipo_membresia","").strip(),
-                "tema":   (st.session_state.get("last_topic","") or "General").strip()
-            }
-            for r in results if r.get("nombre","").strip()
-        ]
+            payload.append({
+                "nombre": nombre,
+                "url":    r.get("url", "").strip() if estatus == "Aprobado" else "",
+                "region": r.get("region", "").strip(),
+                "tipo":   r.get("tipo_membresia", "").strip(),
+                "tema":   (st.session_state.get("last_topic", "") or "General").strip(),
+                "estatus": estatus,
+                "correo": correo
+            })
+
+        if not payload:
+            return False, "Sin resultados para guardar"
+
         nombres_encoded = urllib.parse.quote(json.dumps(payload, ensure_ascii=False))
         url = f"{APPS_SCRIPT_URL}?nombres={nombres_encoded}"
 
@@ -258,7 +290,7 @@ def save_to_sheets(results):
         if not raw:
             return False, "Respuesta vacía del servidor"
         if raw.startswith("<!"):
-            return False, "El Apps Script devolvió HTML. Asegúrate de desplegarlo con acceso: 'Cualquier persona'."
+            return False, "El Apps Script devolvió HTML. Verifica que esté desplegado con acceso 'Cualquier persona'."
 
         data = json.loads(raw)
         if data.get("status") == "ok":
@@ -266,9 +298,14 @@ def save_to_sheets(results):
         return False, data.get("message", "Error desconocido")
 
     except json.JSONDecodeError:
-        return False, f"Respuesta no JSON: {resp.text[:200]}"
+        return False, f"Respuesta no JSON: {raw[:200]}"
     except Exception as ex:
         return False, str(ex)
+
+
+# ── Palabras clave de prioridad ──────────────────────────────────────────────
+KEYWORD_OPTIONS = ["Association", "League", "Alliance", "Society", "Charter",
+                    "Royal College", "Organization"]
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -280,21 +317,30 @@ with st.sidebar:
     n_exc = len(excluidas_preview)
     if n_exc > 0:
         st.markdown(
-            f'''<div style="background:#1a1a1a;border:1px solid #F5E642;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;">
-            <div style="font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:#F5E642;font-weight:700;margin-bottom:3px;">📋 Lista de exclusión</div>
-            <div style="font-size:0.82rem;color:#D0CDBE;"><strong style="color:#F5E642;">{n_exc}</strong> membresías ya obtenidas serán excluidas automáticamente</div>
+            f'''<div style="background:#0A2240;border:1px solid #C8973A;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;">
+            <div style="font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:#E8B84B;font-weight:700;margin-bottom:3px;">📋 Lista de exclusión</div>
+            <div style="font-size:0.82rem;color:#A8BECE;"><strong style="color:#E8B84B;">{n_exc}</strong> membresías ya registradas serán excluidas</div>
             </div>''',
             unsafe_allow_html=True
         )
     else:
         st.markdown(
-            '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;">' +
-            '<div style="font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:#666;font-weight:700;margin-bottom:3px;">📋 Lista de exclusión</div>' +
-            '<div style="font-size:0.82rem;color:#888;">Sin datos o cargando...</div></div>',
+            '<div style="background:#0A2240;border:1px solid #1E4070;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;">'
+            '<div style="font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:#6B7A8D;font-weight:700;margin-bottom:3px;">📋 Lista de exclusión</div>'
+            '<div style="font-size:0.82rem;color:#6B7A8D;">Sin datos o cargando...</div></div>',
             unsafe_allow_html=True
         )
     st.markdown("---")
 
+    st.markdown("### 🌐 Modo de búsqueda")
+    modo_busqueda = st.radio(
+        "Modo",
+        options=["🔴 Live Crawl (Google Search)", "🧠 Base Gemini (conocimiento interno)"],
+        index=0,
+        label_visibility="collapsed"
+    )
+
+    st.markdown("---")
     st.markdown("### 📊 Resultados")
     num_results = st.slider("Cantidad de resultados", min_value=3, max_value=20, value=8, label_visibility="visible")
 
@@ -306,20 +352,14 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### 📚 Tipo de membresía")
-    tipo_academica  = st.checkbox("Académica / Institucional", value=True)
-    tipo_profesional= st.checkbox("Profesiones y Oficios", value=True)
-    tipo_comercial  = st.checkbox("Comercial / Herramientas", value=True)
-    tipo_comunidad  = st.checkbox("Comunidad y Redes", value=True)
-
-    st.markdown("---")
-    st.markdown("### 👤 Audiencia objetivo")
-    aud_instituciones = st.checkbox("Instituciones / Universidades", value=True)
-    aud_investigadores= st.checkbox("Investigadores / Académicos", value=True)
-    aud_docentes      = st.checkbox("Docentes / Profesores", value=True)
-    aud_posgrado      = st.checkbox("Estudiantes de Posgrado", value=True)
-    aud_licenciatura  = st.checkbox("Estudiantes de Licenciatura", value=True)
-    aud_directivos    = st.checkbox("Directivos / Administradores", value=True)
-    aud_bibliotecarios= st.checkbox("Bibliotecarios / Gestores", value=True)
+    tipo_institucional  = st.checkbox("Institucional", value=True)
+    tipo_corporativa    = st.checkbox("Corporativa", value=True)
+    tipo_individual      = st.checkbox("Individual", value=True)
+    tipo_organizacional = st.checkbox("Organizacional", value=True)
+    tipo_academica       = st.checkbox("Académica", value=True)
+    tipo_student         = st.checkbox("Student", value=True)
+    tipo_researchers     = st.checkbox("Researchers", value=True)
+    tipo_partner         = st.checkbox("Partner", value=True)
 
     st.markdown("---")
     st.markdown("### 🔓 Condición de gratuidad")
@@ -334,29 +374,35 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### 🔐 Método de acceso")
-    acc_sso      = st.checkbox("SSO Institucional / IP Whitelist", value=True)
-    acc_edu      = st.checkbox("Dominio .edu verificado", value=True)
+    acc_sso       = st.checkbox("SSO Institucional / IP Whitelist", value=True)
+    acc_edu       = st.checkbox("Dominio .edu verificado", value=True)
     acc_invitacion= st.checkbox("Invitación / Aprobación previa", value=True)
-    acc_personal = st.checkbox("Cuenta personal validada", value=True)
+    acc_personal  = st.checkbox("Cuenta personal validada", value=True)
+
+    st.markdown("---")
+    st.markdown("### ⭐ Palabras clave prioritarias")
+    st.caption("Si aparecen en el nombre, Gemini les dará prioridad")
+    keyword_selections = {}
+    for kw in KEYWORD_OPTIONS:
+        keyword_selections[kw] = st.checkbox(kw, value=True)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers de filtros ───────────────────────────────────────────────────────
 def build_filters_summary():
-    regiones, tipos, audiencias, condiciones, accesos = [], [], [], [], []
+    regiones, tipos, condiciones, accesos, keywords = [], [], [], [], []
     if reg_norteamerica: regiones.append("Norteamérica (EE.UU. y Canadá)")
     if reg_europa:       regiones.append("Europa Occidental, Central y Norte")
     if reg_latam:        regiones.append("América Latina y el Caribe")
-    if tipo_academica:   tipos.append("Académica/Institucional")
-    if tipo_profesional: tipos.append("Profesiones y Oficios")
-    if tipo_comercial:   tipos.append("Comercial/Herramientas")
-    if tipo_comunidad:   tipos.append("Comunidad y Redes")
-    if aud_instituciones:  audiencias.append("Instituciones y Universidades")
-    if aud_investigadores: audiencias.append("Investigadores y Académicos")
-    if aud_docentes:       audiencias.append("Docentes y Profesores")
-    if aud_posgrado:       audiencias.append("Estudiantes de Posgrado")
-    if aud_licenciatura:   audiencias.append("Estudiantes de Licenciatura")
-    if aud_directivos:     audiencias.append("Directivos y Administradores Universitarios")
-    if aud_bibliotecarios: audiencias.append("Bibliotecarios y Gestores de Repositorios")
+
+    if tipo_institucional:   tipos.append("Institucional")
+    if tipo_corporativa:     tipos.append("Corporativa")
+    if tipo_individual:      tipos.append("Individual")
+    if tipo_organizacional:  tipos.append("Organizacional")
+    if tipo_academica:       tipos.append("Académica")
+    if tipo_student:         tipos.append("Student")
+    if tipo_researchers:     tipos.append("Researchers")
+    if tipo_partner:         tipos.append("Partner")
+
     if cond_total:   condiciones.append("Gratuidad total")
     if cond_edu:     condiciones.append("Student Tier (.edu o dominio universitario)")
     if cond_grant:   condiciones.append("Grant-Based Free Tier")
@@ -365,15 +411,34 @@ def build_filters_summary():
     if cond_cert:    condiciones.append("Gratuidad por certificación o cursos completados")
     if cond_beta:    condiciones.append("Acceso Beta Tester")
     if cond_prueba:  condiciones.append("Prueba institucional de 12 meses")
+
     if acc_sso:        accesos.append("SSO Institucional o IP Whitelisting")
     if acc_edu:        accesos.append("Dominio .edu verificado")
     if acc_invitacion: accesos.append("Invitación o aprobación previa")
     if acc_personal:   accesos.append("Cuenta personal con validación de perfil")
-    return regiones, tipos, audiencias, condiciones, accesos
+
+    for kw, selected in keyword_selections.items():
+        if selected:
+            keywords.append(kw)
+
+    return regiones, tipos, condiciones, accesos, keywords
 
 
-def build_prompt(topic, regiones, tipos, audiencias, condiciones, accesos, n, excluidas=None):
+def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas=None, use_search=True):
+    keyword_block = (
+        ", ".join(keywords) if keywords
+        else "ninguna palabra clave especificada"
+    )
+
+    search_instruction = (
+        "Usa búsqueda activa en internet (Google Search grounding) para encontrar plataformas reales y verificar que las URLs existen actualmente."
+        if use_search else
+        "Usa tu conocimiento interno sin buscar en internet en tiempo real. Marca url_verificada como false si no estás seguro de que la URL exista actualmente."
+    )
+
     return f"""Eres un agente especializado en inteligencia de recursos académicos y profesionales. Tu función es identificar, evaluar y catalogar plataformas web que ofrecen membresías, suscripciones o accesos institucionales COMPLETAMENTE GRATUITOS para el sector educativo y de investigación.
+
+MODO DE BÚSQUEDA: {search_instruction}
 
 TEMA DE BÚSQUEDA: {topic if topic else "herramientas y recursos académicos generales"}
 
@@ -385,21 +450,21 @@ REGIONES PRIORITARIAS (busca SOLO en estas):
 TIPOS DE MEMBRESÍA A BUSCAR:
 {chr(10).join(f"- {t}" for t in tipos) if tipos else "- Todos los tipos"}
 
-AUDIENCIAS OBJETIVO:
-{chr(10).join(f"- {a}" for a in audiencias) if audiencias else "- Todas las audiencias"}
-
 CONDICIONES DE GRATUIDAD ACEPTABLES (al menos una debe cumplirse):
 {chr(10).join(f"- {c}" for c in condiciones) if condiciones else "- Cualquier condición de gratuidad"}
 
 MÉTODOS DE ACCESO ACEPTABLES:
 {chr(10).join(f"- {a}" for a in accesos) if accesos else "- Cualquier método de acceso"}
 
+PALABRAS CLAVE DE PRIORIDAD: Si el nombre oficial de la organización contiene alguna de estas palabras, dale prioridad y aumenta su puntuación (suelen ser asociaciones, ligas, alianzas o colegios profesionales con mayor probabilidad de ofrecer membresías institucionales):
+{keyword_block}
+
 REGLAS OBLIGATORIAS:
 1. Solo membresías COMPLETAMENTE GRATUITAS. Excluye cualquier opción de pago.
 2. El período de acceso gratuito debe ser de 12 meses o 1 año como mínimo.
 3. Excluye plataformas de: Asia Oriental/Pacífico, Asia del Sur/Central, África, Medio Oriente.
 4. Excluye organismos multilaterales: ONU, UNESCO, FMI, BM, OCDE, OMS, OEA y equivalentes.
-5. Prioriza plataformas con poca visibilidad sobre las ampliamente conocidas.
+5. Prioriza plataformas con poca visibilidad sobre las ampliamente conocidas, y prioriza aquellas cuyo nombre contenga las palabras clave indicadas.
 6. Nunca inventes URLs. Si no puedes verificar un dato, usa "Sin verificar".
 7. No incluyas contenido detrás de login previo que no sea descubrible públicamente.
 8. Ordena los resultados de mayor a menor puntuación (5 a 1).
@@ -410,17 +475,21 @@ FORMATO DE RESPUESTA: Responde ÚNICAMENTE con un array JSON válido, sin texto 
 
 [
   {{
-    "nombre": "Nombre oficial de la plataforma",
+    "nombre": "Nombre oficial de la organización",
+    "descripcion": "2-3 líneas explicando de qué trata la asociación/organización y a qué se dedica",
     "url": "https://url-directa-a-pagina-de-membresia.com",
-    "para_quien_es_gratis": "Descripción exacta del perfil que califica",
+    "precio": "Gratis / Gratis con condición específica",
     "condicion_gratuidad": "Tipo específico de gratuidad que aplica",
     "metodo_acceso": "Método de acceso requerido",
     "beneficios": ["Beneficio 1", "Beneficio 2", "Beneficio 3", "Beneficio 4"],
-    "tipo_membresia": "Académica|Profesional|Comercial|Comunidad",
+    "link_membresia": "URL directa al formulario o página para solicitar la membresía",
+    "correo_contacto": "Correo de contacto si está disponible públicamente, o 'No disponible'",
+    "tipo_membresia": "Institucional|Corporativa|Individual|Organizacional|Académica|Student|Researchers|Partner",
     "region": "Norteamérica|Europa|América Latina|Global",
     "puntuacion": 4,
     "url_verificada": true,
-    "duracion": "12 meses / 1 año / Indefinida mientras seas estudiante"
+    "duracion": "12 meses / 1 año / Indefinida mientras seas estudiante",
+    "contiene_palabra_clave": true
   }}
 ]""".replace("{{EXCLUSION_BLOCK}}", ("\n".join(f"- {e}" for e in excluidas) if excluidas else "ninguna por ahora"))
 
@@ -440,14 +509,12 @@ def parse_json_results(raw):
     """Intenta parsear el JSON; si está truncado, rescata los objetos completos."""
     raw = clean_json_string(raw)
 
-    # Intento 1: parseo completo
     try:
         results = json.loads(raw)
         return results if isinstance(results, list) else [results]
     except json.JSONDecodeError:
         pass
 
-    # Intento 2: cerrar JSON truncado — añadir }] al final y reintentar
     for suffix in ["}]", "}]}]", "]"]:
         try:
             results = json.loads(raw + suffix)
@@ -455,8 +522,6 @@ def parse_json_results(raw):
         except json.JSONDecodeError:
             pass
 
-    # Intento 3: extraer objetos completos uno a uno
-    # Busca llaves balanceadas para no cortar campos a medias
     results = []
     depth = 0
     start = None
@@ -485,25 +550,38 @@ def parse_json_results(raw):
     )
 
 
-def run_search(topic, regiones, tipos, audiencias, condiciones, accesos, n):
+def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_search=True):
     excluidas = load_existing_memberships()
-    prompt = build_prompt(topic, regiones, tipos, audiencias, condiciones, accesos, n, excluidas)
+    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas, use_search)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
-    # Calcular tokens necesarios: ~400 tokens por resultado + margen
-    needed_tokens = max(8192, n * 500 + 2000)
+    needed_tokens = max(8192, n * 600 + 2000)
 
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.3,
-            max_output_tokens=needed_tokens
-        )
+    gen_config = genai.types.GenerationConfig(
+        temperature=0.3,
+        max_output_tokens=needed_tokens
     )
+
+    tools = None
+    if use_search:
+        tools = "google_search_retrieval"
+
+    try:
+        if use_search:
+            response = model.generate_content(
+                prompt,
+                generation_config=gen_config,
+                tools=[{"google_search": {}}]
+            )
+        else:
+            response = model.generate_content(prompt, generation_config=gen_config)
+    except Exception:
+        # Fallback sin tools si el modelo/SDK no soporta google_search en esta versión
+        response = model.generate_content(prompt, generation_config=gen_config)
+
     raw = response.text.strip()
 
-    # Detectar respuesta truncada por finish_reason
     finish = None
     try:
         finish = response.candidates[0].finish_reason.name
@@ -512,7 +590,6 @@ def run_search(topic, regiones, tipos, audiencias, condiciones, accesos, n):
 
     results = parse_json_results(raw)
 
-    # Si vino truncada y recuperamos menos resultados de los pedidos, avisar en sesión
     if finish == "MAX_TOKENS" and len(results) < n:
         st.session_state["truncated_warning"] = (
             f"⚠️ Gemini truncó la respuesta ({len(results)} de {n} resultados recuperados). "
@@ -530,17 +607,25 @@ def render_stars(score):
 
 def render_type_badge(tipo):
     t = (tipo or "").lower()
-    if "académic" in t or "institucional" in t:
-        return f'<span class="badge badge-type-academica">{tipo}</span>'
-    elif "profesion" in t or "oficio" in t:
-        return f'<span class="badge badge-type-profesional">{tipo}</span>'
-    elif "comercial" in t or "herramienta" in t:
-        return f'<span class="badge badge-type-comercial">{tipo}</span>'
-    else:
-        return f'<span class="badge badge-type-comunidad">{tipo}</span>'
+    mapping = {
+        "institucional": "badge-type-institucional",
+        "corporativa": "badge-type-corporativa",
+        "individual": "badge-type-individual",
+        "organizacional": "badge-type-organizacional",
+        "académica": "badge-type-academica",
+        "academica": "badge-type-academica",
+        "student": "badge-type-student",
+        "researchers": "badge-type-researchers",
+        "partner": "badge-type-partner",
+    }
+    cls = mapping.get(t, "badge-type-institucional")
+    return f'<span class="badge {cls}">{tipo}</span>'
 
 
 def render_results(results):
+    if "decisions" not in st.session_state:
+        st.session_state.decisions = {}
+
     for i, r in enumerate(results):
         score    = r.get("puntuacion", 3)
         verified = r.get("url_verificada", None)
@@ -551,13 +636,29 @@ def render_results(results):
         else:
             ver_html = '<span class="verified-badge verified-unk">? Por verificar</span>'
 
-        url       = r.get("url", "#")
-        nombre    = r.get("nombre", "Sin nombre")
-        bene_html = "".join(f"<li>{b}</li>" for b in r.get("beneficios", []))
+        priority_html = ""
+        if r.get("contiene_palabra_clave"):
+            priority_html = '<span class="badge badge-priority">⭐ Prioridad</span>'
+
+        url            = r.get("url", "#")
+        nombre         = r.get("nombre", "Sin nombre")
+        descripcion    = r.get("descripcion", "")
+        precio         = r.get("precio", "Gratis")
+        link_membresia = r.get("link_membresia", url)
+        correo_default = r.get("correo_contacto", "")
+        bene_html      = "".join(f"<li>{b}</li>" for b in r.get("beneficios", []))
+
+        decision = st.session_state.decisions.get(i, {"estatus": "Pendiente", "correo": correo_default})
+
+        card_class = "result-card"
+        if decision["estatus"] == "Aprobado":
+            card_class += " approved"
+        elif decision["estatus"] == "Rechazado":
+            card_class += " rejected"
 
         st.markdown(f"""
-        <div class="result-card">
-            <div class="card-title">#{i+1} — {nombre} {ver_html}</div>
+        <div class="{card_class}">
+            <div class="card-title">#{i+1} — {nombre} {ver_html} {priority_html}</div>
             <div class="card-url"><a href="{url}" target="_blank">{url}</a></div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:0.6rem;">
                 {render_stars(score)}
@@ -565,16 +666,44 @@ def render_results(results):
                 <span class="badge badge-region">{r.get("region","")}</span>
                 <span class="badge badge-access">🕐 {r.get("duracion","12 meses")}</span>
             </div>
-            <div class="card-section-title">Para quién es gratis</div>
-            <div class="card-text">{r.get("para_quien_es_gratis","")}</div>
+            <div class="card-section-title">De qué trata</div>
+            <div class="card-text">{descripcion}</div>
+            <div class="card-section-title">Precio</div>
+            <div class="card-text">{precio}</div>
             <div class="card-section-title">Condición de gratuidad</div>
             <div class="card-text">{r.get("condicion_gratuidad","")}</div>
             <div class="card-section-title">Método de acceso</div>
             <div class="card-text">{r.get("metodo_acceso","")}</div>
             <div class="card-section-title">Beneficios principales</div>
             <div class="card-text"><ul style="margin:0;padding-left:1.2rem;">{bene_html}</ul></div>
+            <div class="card-section-title">Solicitar membresía</div>
+            <div class="card-text"><a href="{link_membresia}" target="_blank">{link_membresia}</a></div>
         </div>
         """, unsafe_allow_html=True)
+
+        col_a, col_b, col_c = st.columns([1.3, 2, 1])
+        with col_a:
+            estatus = st.radio(
+                f"Decisión #{i+1}",
+                options=["Pendiente", "Aprobado", "Rechazado"],
+                index=["Pendiente", "Aprobado", "Rechazado"].index(decision["estatus"]),
+                key=f"estatus_{i}",
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+        with col_b:
+            correo = st.text_input(
+                f"Correo de contacto #{i+1}",
+                value=decision.get("correo", correo_default),
+                key=f"correo_{i}",
+                placeholder="correo@institucion.edu",
+                label_visibility="collapsed"
+            )
+        with col_c:
+            st.write("")
+
+        st.session_state.decisions[i] = {"estatus": estatus, "correo": correo}
+        st.markdown("<div style='margin-bottom:0.8rem;'></div>", unsafe_allow_html=True)
 
 
 def build_excel(results, topic):
@@ -582,43 +711,40 @@ def build_excel(results, topic):
     ws = wb.active
     ws.title = "Membresías Gratuitas"
 
-    # Paleta
-    COLOR_HEADER_BG = "0F0F0F"
-    COLOR_HEADER_FG = "F5E642"
-    COLOR_SUBHEADER  = "F5E642"
-    COLOR_SUBHEADER_FG = "0F0F0F"
-    COLOR_ROW_ALT   = "F9F8F2"
-    COLOR_BORDER    = "D8D5C8"
-    COLOR_SCORE_5   = "1DB954"
-    COLOR_SCORE_4   = "6BCB77"
-    COLOR_SCORE_3   = "F5E642"
-    COLOR_SCORE_2   = "FFB347"
-    COLOR_SCORE_1   = "E53E3E"
+    COLOR_HEADER_BG = "0D2B4E"
+    COLOR_HEADER_FG = "E8B84B"
+    COLOR_SUBHEADER  = "C8973A"
+    COLOR_SUBHEADER_FG = "FFFFFF"
+    COLOR_ROW_ALT   = "F4F6F9"
+    COLOR_BORDER    = "C8D0DC"
+    COLOR_SCORE_5   = "1A5232"
+    COLOR_SCORE_4   = "3F7D5C"
+    COLOR_SCORE_3   = "C8973A"
+    COLOR_SCORE_2   = "B5651D"
+    COLOR_SCORE_1   = "7B1E1E"
 
     thin = Side(style="thin", color=COLOR_BORDER)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    # Título
-    ws.merge_cells("A1:K1")
+    ws.merge_cells("A1:M1")
     title_cell = ws["A1"]
-    title_cell.value = f"ARIA Membresías Gratuitas — {topic or 'Recursos Académicos'}"
+    title_cell.value = f"ARIA Membresías — {topic or 'Recursos Académicos'}"
     title_cell.font = Font(name="Arial", bold=True, size=14, color=COLOR_HEADER_FG)
     title_cell.fill = PatternFill("solid", fgColor=COLOR_HEADER_BG)
     title_cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 32
 
-    # Fecha
-    ws.merge_cells("A2:K2")
+    ws.merge_cells("A2:M2")
     date_cell = ws["A2"]
     date_cell.value = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}  |  Total resultados: {len(results)}"
-    date_cell.font = Font(name="Arial", size=10, color="6B6860")
+    date_cell.font = Font(name="Arial", size=10, color="6B7A8D")
     date_cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[2].height = 20
 
-    # Encabezados
-    headers = ["#", "Nombre", "URL", "Para quién es gratis", "Condición de gratuidad",
-               "Método de acceso", "Beneficios", "Tipo", "Región", "Duración", "Puntuación"]
-    col_widths = [4, 28, 40, 35, 30, 28, 55, 18, 16, 22, 12]
+    headers = ["#", "Nombre", "Descripción", "URL", "Precio", "Condición de gratuidad",
+               "Método de acceso", "Beneficios", "Link Membresía", "Correo Contacto",
+               "Tipo", "Región", "Puntuación"]
+    col_widths = [4, 26, 40, 32, 20, 28, 26, 45, 32, 24, 16, 16, 12]
 
     for col_idx, (h, w) in enumerate(zip(headers, col_widths), start=1):
         cell = ws.cell(row=3, column=col_idx, value=h)
@@ -629,7 +755,6 @@ def build_excel(results, topic):
         ws.column_dimensions[get_column_letter(col_idx)].width = w
     ws.row_dimensions[3].height = 22
 
-    # Datos
     score_colors = {5: COLOR_SCORE_5, 4: COLOR_SCORE_4, 3: COLOR_SCORE_3, 2: COLOR_SCORE_2, 1: COLOR_SCORE_1}
 
     for row_idx, r in enumerate(results, start=4):
@@ -643,14 +768,16 @@ def build_excel(results, topic):
         values = [
             row_idx - 3,
             r.get("nombre", ""),
+            r.get("descripcion", ""),
             r.get("url", ""),
-            r.get("para_quien_es_gratis", ""),
+            r.get("precio", "Gratis"),
             r.get("condicion_gratuidad", ""),
             r.get("metodo_acceso", ""),
             beneficios_txt,
+            r.get("link_membresia", r.get("url", "")),
+            r.get("correo_contacto", ""),
             r.get("tipo_membresia", ""),
             r.get("region", ""),
-            r.get("duracion", ""),
             stars,
         ]
 
@@ -660,20 +787,17 @@ def build_excel(results, topic):
             cell.fill = row_fill
             cell.border = border
             cell.alignment = Alignment(vertical="top", wrap_text=True,
-                                       horizontal="center" if col_idx in [1, 8, 9, 10, 11] else "left")
+                                       horizontal="center" if col_idx in [1, 11, 12, 13] else "left")
 
-            # Colorear puntuación
-            if col_idx == 11:
+            if col_idx == 13:
                 sc = score_colors.get(score, "888888")
                 cell.font = Font(name="Arial", size=10, bold=True, color=sc)
                 cell.fill = row_fill
 
         ws.row_dimensions[row_idx].height = max(60, 15 * len(r.get("beneficios", [])))
 
-    # Freeze panes
     ws.freeze_panes = "A4"
 
-    # Hoja de metadatos
     ws2 = wb.create_sheet("Filtros aplicados")
     ws2["A1"] = "Parámetro"
     ws2["B1"] = "Valor"
@@ -689,7 +813,11 @@ def build_excel(results, topic):
         ("Fecha de generación", datetime.now().strftime("%d/%m/%Y %H:%M")),
         ("Total resultados", len(results)),
         ("Regiones", ", ".join([r for r in ["Norteamérica" if reg_norteamerica else "", "Europa" if reg_europa else "", "América Latina" if reg_latam else ""] if r])),
-        ("Tipos de membresía", ", ".join([t for t, v in [("Académica", tipo_academica), ("Profesional", tipo_profesional), ("Comercial", tipo_comercial), ("Comunidad", tipo_comunidad)] if v])),
+        ("Tipos de membresía", ", ".join([t for t, v in [
+            ("Institucional", tipo_institucional), ("Corporativa", tipo_corporativa),
+            ("Individual", tipo_individual), ("Organizacional", tipo_organizacional),
+            ("Académica", tipo_academica), ("Student", tipo_student),
+            ("Researchers", tipo_researchers), ("Partner", tipo_partner)] if v])),
         ("Condiciones de gratuidad", ", ".join([c for c, v in [("Gratuidad total", cond_total), ("Student Tier", cond_edu), ("Grant-Based", cond_grant), ("Sandbox", cond_sandbox), ("Alumni Launchpad", cond_alumni), ("Certificación", cond_cert), ("Beta Tester", cond_beta), ("Prueba 12m", cond_prueba)] if v])),
     ]
     for r_idx, (k, v) in enumerate(meta, start=2):
@@ -716,7 +844,7 @@ st.markdown(f"""
     </div>
     <div class="inst-badge">
         <div class="inst-badge-label">Versión</div>
-        <div class="inst-badge-value">1.0 · Acceso Abierto</div>
+        <div class="inst-badge-value">1.1 · Acceso Abierto</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -736,25 +864,33 @@ if "results" not in st.session_state:
     st.session_state.results = None
 if "last_topic" not in st.session_state:
     st.session_state.last_topic = ""
+if "decisions" not in st.session_state:
+    st.session_state.decisions = {}
+
 
 def do_search():
     if not api_key:
         st.error("Configura GEMINI_API_KEY en los Secrets de Streamlit Cloud.")
         return
-    regiones, tipos, audiencias, condiciones, accesos = build_filters_summary()
+    regiones, tipos, condiciones, accesos, keywords = build_filters_summary()
     if not regiones:
         st.warning("Selecciona al menos una región en el panel lateral.")
         return
     if not condiciones:
         st.warning("Selecciona al menos una condición de gratuidad.")
         return
+
+    use_search = modo_busqueda.startswith("🔴")
+
     with st.spinner("Buscando membresías gratuitas..."):
         try:
-            results = run_search(topic, regiones, tipos, audiencias, condiciones, accesos, num_results)
+            results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, num_results, use_search)
             st.session_state.results = results
             st.session_state.last_topic = topic
+            st.session_state.decisions = {}
         except Exception as e:
             st.error(f"Error: {str(e)}")
+
 
 if buscar:
     do_search()
@@ -763,7 +899,6 @@ if buscar:
 if st.session_state.results:
     results = st.session_state.results
 
-    # Barra de acciones
     col_status, col_regen, col_excel, col_save = st.columns([2.5, 1.2, 1.2, 1.2])
     with col_status:
         st.markdown(
@@ -787,19 +922,17 @@ if st.session_state.results:
     with col_save:
         if st.button("💾 Guardar en Sheet", use_container_width=True):
             with st.spinner("Guardando en Google Sheets..."):
-                ok, info = save_to_sheets(results)
+                ok, info = save_to_sheets(results, st.session_state.decisions)
             if ok:
                 added = info if isinstance(info, int) else 0
                 if added > 0:
-                    st.success(f"✓ {added} nuevas membresías guardadas")
+                    st.success(f"✓ {added} nuevas membresías guardadas con su estatus")
                 else:
                     st.info("Todas ya estaban en el Sheet")
                 st.cache_data.clear()
-                st.rerun()
             else:
                 st.error(f"Error al guardar: {info}")
 
-    # Mostrar advertencia de truncado si aplica
     if st.session_state.get("truncated_warning"):
         st.warning(st.session_state["truncated_warning"])
 
