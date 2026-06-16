@@ -111,6 +111,30 @@ html, body, [data-testid="stAppViewContainer"] {
 .inst-badge-label { font-size: 0.62rem; color: #8BAAC8; text-transform: uppercase; letter-spacing: 0.1em; }
 .inst-badge-value { font-size: 0.82rem; color: var(--gold-light); font-weight: 600; margin-top: 2px; }
 
+.inst-mascot-box {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 4px; flex-shrink: 0;
+}
+.inst-mascot-label {
+    font-size: 0.62rem; color: #8BAAC8;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    text-align: center;
+}
+.mascot-searching .mag-glass { animation: mag-sweep 1.4s ease-in-out infinite; }
+.mascot-searching .mascot-body { animation: mascot-bob 1.4s ease-in-out infinite; }
+.mascot-idle .mag-glass { animation: none; }
+.mascot-idle .mascot-body { animation: none; }
+@keyframes mag-sweep {
+    0%   { transform: rotate(-8deg) translateX(0px); }
+    50%  { transform: rotate(8deg) translateX(3px); }
+    100% { transform: rotate(-8deg) translateX(0px); }
+}
+@keyframes mascot-bob {
+    0%   { transform: translateY(0px); }
+    50%  { transform: translateY(-2px); }
+    100% { transform: translateY(0px); }
+}
+
 .stTextInput input {
     border: 1.5px solid var(--border) !important;
     border-radius: 6px !important;
@@ -833,19 +857,47 @@ def build_excel(results, topic):
     return buf
 
 
+# ── Mascota animada del investigador ─────────────────────────────────────────
+def get_researcher_mascot_svg(state="idle"):
+    """state: 'idle' o 'searching' — controla la animación vía clase CSS."""
+    cls = "mascot-searching" if state == "searching" else "mascot-idle"
+    return f'''<svg class="{cls}" width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+<g class="mascot-body">
+  <circle cx="28" cy="20" r="9" fill="#E8B84B" stroke="#0D2B4E" stroke-width="1.2"/>
+  <path d="M20 18 Q28 10 36 18" fill="none" stroke="#0D2B4E" stroke-width="1.5" stroke-linecap="round"/>
+  <rect x="19" y="29" width="18" height="17" rx="6" fill="#1A3F6F" stroke="#0D2B4E" stroke-width="1.2"/>
+  <rect x="23" y="29" width="10" height="6" rx="2" fill="#2E5FA3"/>
+  <circle cx="24" cy="20" r="1.4" fill="#0D2B4E"/>
+  <circle cx="32" cy="20" r="1.4" fill="#0D2B4E"/>
+</g>
+<g class="mag-glass" style="transform-origin: 40px 30px;">
+  <circle cx="40" cy="28" r="6.5" fill="rgba(232,184,75,0.18)" stroke="#E8B84B" stroke-width="2"/>
+  <line x1="44.5" y1="32.5" x2="49" y2="37" stroke="#E8B84B" stroke-width="2.4" stroke-linecap="round"/>
+</g>
+</svg>'''
+
+
 # ── Main UI ───────────────────────────────────────────────────────────────────
-st.markdown(f"""
+if "is_searching" not in st.session_state:
+    st.session_state.is_searching = False
+
+mascot_state = "searching" if st.session_state.is_searching else "idle"
+mascot_label = "Buscando..." if st.session_state.is_searching else "Listo para buscar"
+mascot_svg = get_researcher_mascot_svg(mascot_state)
+
+header_placeholder = st.empty()
+header_placeholder.markdown(f"""
 <div class="inst-header">
     <div class="inst-header-left">
         <div class="inst-logo">🎓</div>
         <div>
             <div class="inst-title">ARIA <span>Membresías</span></div>
-            <div class="inst-subtitle">Sistema de Inteligencia de Recursos Académicos Gratuitos</div>
+            <div class="inst-subtitle">Sistema de Inteligencia de Recursos Académicos</div>
         </div>
     </div>
-    <div class="inst-badge">
-        <div class="inst-badge-label">Versión</div>
-        <div class="inst-badge-value">1.1 · Acceso Abierto</div>
+    <div class="inst-mascot-box">
+        {mascot_svg}
+        <div class="inst-mascot-label">{mascot_label}</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -883,14 +935,47 @@ def do_search():
 
     use_search = modo_busqueda.startswith("🔴")
 
-    with st.spinner("Buscando membresías gratuitas..."):
-        try:
-            results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, num_results, use_search)
-            st.session_state.results = results
-            st.session_state.last_topic = topic
-            st.session_state.decisions = {}
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+    st.session_state.is_searching = True
+    header_placeholder.markdown(f"""
+    <div class="inst-header">
+        <div class="inst-header-left">
+            <div class="inst-logo">🎓</div>
+            <div>
+                <div class="inst-title">ARIA <span>Membresías</span></div>
+                <div class="inst-subtitle">Sistema de Inteligencia de Recursos Académicos</div>
+            </div>
+        </div>
+        <div class="inst-mascot-box">
+            {get_researcher_mascot_svg("searching")}
+            <div class="inst-mascot-label">Buscando...</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    try:
+        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, num_results, use_search)
+        st.session_state.results = results
+        st.session_state.last_topic = topic
+        st.session_state.decisions = {}
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+    finally:
+        st.session_state.is_searching = False
+        header_placeholder.markdown(f"""
+        <div class="inst-header">
+            <div class="inst-header-left">
+                <div class="inst-logo">🎓</div>
+                <div>
+                    <div class="inst-title">ARIA <span>Membresías</span></div>
+                    <div class="inst-subtitle">Sistema de Inteligencia de Recursos Académicos</div>
+                </div>
+            </div>
+            <div class="inst-mascot-box">
+                {get_researcher_mascot_svg("idle")}
+                <div class="inst-mascot-label">Búsqueda completada</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 if buscar:
