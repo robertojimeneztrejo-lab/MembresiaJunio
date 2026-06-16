@@ -364,6 +364,9 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
+    expandir_tema = st.checkbox("🔎 Buscar sinónimos y términos relacionados", value=True,
+                                  help="Gemini expandirá tu tema a variantes semánticas (sinónimos, inglés/español, subcampos) antes de buscar")
+
     st.markdown("---")
     st.markdown("### 📊 Resultados")
     num_results = st.slider("Cantidad de resultados", min_value=3, max_value=20, value=8, label_visibility="visible")
@@ -449,7 +452,7 @@ def build_filters_summary():
     return regiones, tipos, condiciones, accesos, keywords
 
 
-def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas=None, use_search=True):
+def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas=None, use_search=True, expandir_tema=True):
     keyword_block = (
         ", ".join(keywords) if keywords
         else "ninguna palabra clave especificada"
@@ -461,13 +464,21 @@ def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excl
         "Usa tu conocimiento interno sin buscar en internet en tiempo real. Marca url_verificada como false si no estás seguro de que la URL exista actualmente."
     )
 
+    expansion_instruction = ""
+    if expandir_tema and topic:
+        expansion_instruction = f"""
+EXPANSIÓN SEMÁNTICA DEL TEMA (paso obligatorio antes de buscar):
+Antes de buscar, genera mentalmente una lista de 5 a 8 sinónimos, términos relacionados, variantes en inglés/español y subcampos del tema "{topic}". Por ejemplo, si el tema es "gestión de referencias bibliográficas", variantes incluirían: reference management, citation management, bibliografía, manejo de citas, gestores bibliográficos, EndNote alternatives, software de citación académica.
+Usa TODAS esas variantes como consultas de búsqueda adicionales, no solo el término literal escrito por el usuario. Esto es crítico: muchas organizaciones usan terminología distinta a la del usuario aunque cubran el mismo dominio.
+"""
+
     return f"""Eres un agente especializado en inteligencia de recursos académicos y profesionales. Tu función es identificar, evaluar y catalogar plataformas web que ofrecen membresías, suscripciones o accesos institucionales COMPLETAMENTE GRATUITOS para el sector educativo y de investigación.
 
 MODO DE BÚSQUEDA: {search_instruction}
 
 TEMA DE BÚSQUEDA: {topic if topic else "herramientas y recursos académicos generales"}
-
-OBJETIVO: Encuentra exactamente {n} páginas web que ofrezcan membresías académicas o institucionales GRATUITAS (sin costo alguno, periodo mínimo 12 meses o 1 año) para el tema indicado.
+{expansion_instruction}
+OBJETIVO: Encuentra exactamente {n} páginas web que ofrezcan membresías académicas o institucionales GRATUITAS (sin costo alguno, periodo mínimo 12 meses o 1 año) para el tema indicado y sus variantes semánticas.
 
 REGIONES PRIORITARIAS (busca SOLO en estas):
 {chr(10).join(f"- {r}" for r in regiones) if regiones else "- Sin filtro regional"}
@@ -575,9 +586,9 @@ def parse_json_results(raw):
     )
 
 
-def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_search=True):
+def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_search=True, expandir_tema=True):
     excluidas = load_existing_memberships()
-    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas, use_search)
+    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas, use_search, expandir_tema)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
@@ -953,7 +964,7 @@ def do_search():
     """, unsafe_allow_html=True)
 
     try:
-        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, num_results, use_search)
+        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, num_results, use_search, expandir_tema)
         st.session_state.results = results
         st.session_state.last_topic = topic
         st.session_state.decisions = {}
