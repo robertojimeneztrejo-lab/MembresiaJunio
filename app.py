@@ -294,7 +294,7 @@ def save_to_sheets(results, decisions):
 
             payload.append({
                 "nombre": nombre,
-                "url":    r.get("url", "").strip() if estatus == "Aprobado" else "",
+                "url":    r.get("url", "").strip(),
                 "region": r.get("region", "").strip(),
                 "tipo":   r.get("tipo_membresia", "").strip(),
                 "tema":   (st.session_state.get("last_topic", "") or "General").strip(),
