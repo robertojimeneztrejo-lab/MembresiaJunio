@@ -973,7 +973,7 @@ Temas clave:"""
         try:
             response = model.generate_content(
                 mini_prompt,
-                generation_config=genai.types.GenerationConfig(temperature=0.2, max_output_tokens=300)
+                generation_config=genai.types.GenerationConfig(temperature=0.2, max_output_tokens=800)
             )
         except Exception as api_err:
             return None, f"Error al llamar a Gemini: {str(api_err)}"
@@ -1004,6 +1004,11 @@ Temas clave:"""
                         return [str(t).strip() for t in topics if str(t).strip()], None
                 except json.JSONDecodeError:
                     pass
+
+            # JSON truncado: rescatar todos los strings completos "..." encontrados
+            rescued = re.findall(r'"([^"]+)"', raw_clean)
+            if rescued:
+                return [s.strip() for s in rescued if s.strip()], None
 
         return None, f"Gemini respondió pero no en formato JSON esperado. Respuesta cruda: {raw[:300]}"
 
