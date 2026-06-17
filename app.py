@@ -407,21 +407,16 @@ with st.sidebar:
     st.markdown("### 💳 Modalidad de costo")
     modalidad_costo = st.radio(
         "Modalidad",
-        options=["Buscar pago", "Costo preferencial"],
+        options=["Buscar membresía con costo", "Costo preferencial"],
         index=1,
         label_visibility="collapsed",
         help="'Costo preferencial' busca membresías gratuitas o con condiciones especiales para el sector académico"
     )
 
+    # Las 8 condiciones quedan fijas en el prompt, ya no son seleccionables en UI
     if modalidad_costo == "Costo preferencial":
-        cond_total  = st.checkbox("Gratuidad total", value=True)
-        cond_edu    = st.checkbox("Student Tier (.edu / dominio univ.)", value=True)
-        cond_grant  = st.checkbox("Grant-Based Free Tier", value=True)
-        cond_sandbox= st.checkbox("Institutional Sandbox", value=True)
-        cond_alumni = st.checkbox("Año de Gracia / Alumni Launchpad", value=True)
-        cond_cert   = st.checkbox("Gratuidad por Certificación", value=True)
-        cond_beta   = st.checkbox("Acceso Beta Tester", value=True)
-        cond_prueba = st.checkbox("Prueba Institucional 12 meses", value=True)
+        cond_total = cond_edu = cond_grant = cond_sandbox = True
+        cond_alumni = cond_cert = cond_beta = cond_prueba = True
     else:
         cond_total = cond_edu = cond_grant = cond_sandbox = False
         cond_alumni = cond_cert = cond_beta = cond_prueba = False
@@ -1066,7 +1061,7 @@ def do_search():
     """, unsafe_allow_html=True)
 
     try:
-        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, MAX_RESULTS, use_search, expandir_tema, modalidad_costo == "Buscar pago")
+        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, MAX_RESULTS, use_search, expandir_tema, modalidad_costo == "Buscar membresía con costo")
         st.session_state.results = results
         st.session_state.last_topic = topic
         st.session_state.decisions = {}
