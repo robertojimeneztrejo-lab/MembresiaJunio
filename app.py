@@ -921,7 +921,7 @@ def extract_topics_from_pdf(pdf_file, max_chars=6000):
     y usa una llamada a Gemini para identificar 3-6 temas clave de búsqueda.
     Funciona tanto con dossiers/CVs personales como con planes de estudio o folletos
     institucionales que listan asignaturas o áreas de conocimiento.
-    Devuelve una lista de temas (strings) o None si no se pudo extraer nada útil.
+    Devuelve (lista_de_temas, None) en éxito, o (None, mensaje_error) en fallo.
     """
     try:
         reader = PdfReader(pdf_file)
@@ -933,9 +933,8 @@ def extract_topics_from_pdf(pdf_file, max_chars=6000):
         full_doc = re.sub(r"\s+", " ", full_doc).strip()
 
         if len(full_doc) < 50:
-            return None
+            return None, "El PDF no contiene texto extraíble (puede ser un escaneo de imagen sin OCR)."
 
-        # Priorizar páginas que mencionan temario/asignaturas/plan de estudios/contenidos
         keywords_priority = ["asignatura", "plan de estudio", "temario", "contenido",
                               "índice", "syllabus", "módulo", "unidad", "curso"]
         priority_text = ""
@@ -947,7 +946,6 @@ def extract_topics_from_pdf(pdf_file, max_chars=6000):
             else:
                 other_text += " " + page_text
 
-        # Construir el texto final: prioridad primero, relleno con el resto si falta espacio
         combined = re.sub(r"\s+", " ", priority_text).strip()
         if len(combined) < max_chars:
             filler = re.sub(r"\s+", " ", other_text).strip()
@@ -956,7 +954,7 @@ def extract_topics_from_pdf(pdf_file, max_chars=6000):
             combined = combined[:max_chars]
 
         if not api_key:
-            return None
+            return None, "No hay GEMINI_API_KEY configurada en los Secrets."
 
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-2.5-flash")
@@ -972,32 +970,45 @@ Fragmento del documento:
 
 Temas clave:"""
 
-        response = model.generate_content(
-            mini_prompt,
-            generation_config=genai.types.GenerationConfig(temperature=0.2, max_output_tokens=200)
-        )
-        raw = response.text.strip()
-        raw = re.sub(r"```json", "", raw)
-        raw = re.sub(r"```", "", raw).strip()
+        try:
+            response = model.generate_content(
+                mini_prompt,
+                generation_config=genai.types.GenerationConfig(temperature=0.2, max_output_tokens=300)
+            )
+        except Exception as api_err:
+            return None, f"Error al llamar a Gemini: {str(api_err)}"
 
         try:
-            topics = json.loads(raw)
+            raw = response.text.strip()
+        except Exception:
+            finish_reason = None
+            try:
+                finish_reason = response.candidates[0].finish_reason
+            except Exception:
+                pass
+            return None, f"Gemini no devolvió texto utilizable (finish_reason={finish_reason}). Puede ser un bloqueo de seguridad o respuesta vacía."
+
+        raw_clean = re.sub(r"```json", "", raw)
+        raw_clean = re.sub(r"```", "", raw_clean).strip()
+
+        try:
+            topics = json.loads(raw_clean)
             if isinstance(topics, list) and topics:
-                return [str(t).strip() for t in topics if str(t).strip()]
+                return [str(t).strip() for t in topics if str(t).strip()], None
         except json.JSONDecodeError:
-            match = re.search(r"\[.*\]", raw, re.DOTALL)
+            match = re.search(r"\[.*\]", raw_clean, re.DOTALL)
             if match:
                 try:
                     topics = json.loads(match.group())
                     if isinstance(topics, list) and topics:
-                        return [str(t).strip() for t in topics if str(t).strip()]
+                        return [str(t).strip() for t in topics if str(t).strip()], None
                 except json.JSONDecodeError:
                     pass
 
-        return None
+        return None, f"Gemini respondió pero no en formato JSON esperado. Respuesta cruda: {raw[:300]}"
 
-    except Exception:
-        return None
+    except Exception as ex:
+        return None, f"Error inesperado procesando el PDF: {str(ex)}"
 
 
 # ── Main UI ───────────────────────────────────────────────────────────────────
@@ -1047,12 +1058,12 @@ with st.expander("📄 O cargar un dossier, temario o plan de estudios en PDF pa
     if pdf_file is not None:
         if st.button("🔎 Detectar temas del documento", key="detect_topic_btn"):
             with st.spinner("Analizando el documento..."):
-                detected_topics = extract_topics_from_pdf(pdf_file)
+                detected_topics, error_msg = extract_topics_from_pdf(pdf_file)
             if detected_topics:
                 st.session_state.detected_topics = detected_topics
                 st.rerun()
             else:
-                st.warning("No se pudieron identificar temas claros en este PDF. Intenta escribir el tema manualmente o verifica que el documento tenga texto seleccionable (no sea un escaneo de imagen).")
+                st.error(f"No se pudieron identificar temas: {error_msg}")
 
     if st.session_state.get("detected_topics"):
         st.markdown("**Temas detectados — selecciona uno para usarlo como búsqueda:**")
