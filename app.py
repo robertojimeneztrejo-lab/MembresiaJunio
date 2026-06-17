@@ -914,29 +914,46 @@ def get_researcher_mascot_svg(state="idle"):
 </svg>'''
 
 
-# ── Extracción ligera de tema desde dossier PDF ──────────────────────────────
-def extract_topic_from_pdf(pdf_file, max_chars=3000):
+# ── Extracción de temas clave desde dossier o temario PDF ────────────────────
+def extract_topics_from_pdf(pdf_file, max_chars=6000):
     """
-    Extrae solo texto (sin OCR ni imágenes) del PDF y usa una llamada corta
-    a Gemini para identificar el área/tema académico principal.
-    Diseñado para ser rápido: no envía el PDF completo, solo un resumen de texto.
+    Extrae texto del PDF (priorizando secciones de temario/plan de estudios si existen)
+    y usa una llamada a Gemini para identificar 3-6 temas clave de búsqueda.
+    Funciona tanto con dossiers/CVs personales como con planes de estudio o folletos
+    institucionales que listan asignaturas o áreas de conocimiento.
+    Devuelve una lista de temas (strings) o None si no se pudo extraer nada útil.
     """
     try:
         reader = PdfReader(pdf_file)
-        text_chunks = []
-        total_chars = 0
+        all_pages_text = []
         for page in reader.pages:
-            page_text = page.extract_text() or ""
-            text_chunks.append(page_text)
-            total_chars += len(page_text)
-            if total_chars >= max_chars:
-                break
+            all_pages_text.append(page.extract_text() or "")
 
-        full_text = " ".join(text_chunks).strip()
-        full_text = re.sub(r"\s+", " ", full_text)[:max_chars]
+        full_doc = " ".join(all_pages_text)
+        full_doc = re.sub(r"\s+", " ", full_doc).strip()
 
-        if len(full_text) < 50:
+        if len(full_doc) < 50:
             return None
+
+        # Priorizar páginas que mencionan temario/asignaturas/plan de estudios/contenidos
+        keywords_priority = ["asignatura", "plan de estudio", "temario", "contenido",
+                              "índice", "syllabus", "módulo", "unidad", "curso"]
+        priority_text = ""
+        other_text = ""
+        for page_text in all_pages_text:
+            low = page_text.lower()
+            if any(k in low for k in keywords_priority):
+                priority_text += " " + page_text
+            else:
+                other_text += " " + page_text
+
+        # Construir el texto final: prioridad primero, relleno con el resto si falta espacio
+        combined = re.sub(r"\s+", " ", priority_text).strip()
+        if len(combined) < max_chars:
+            filler = re.sub(r"\s+", " ", other_text).strip()
+            combined = (combined + " " + filler)[:max_chars]
+        else:
+            combined = combined[:max_chars]
 
         if not api_key:
             return None
@@ -944,19 +961,40 @@ def extract_topic_from_pdf(pdf_file, max_chars=3000):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-2.5-flash")
 
-        mini_prompt = f"""Lee el siguiente fragmento de un dossier o CV académico y responde ÚNICAMENTE con una frase corta (máximo 8 palabras) que describa el área, disciplina o campo de estudio principal de la persona. No agregues explicación, solo la frase.
+        mini_prompt = f"""Lee el siguiente fragmento de un documento (puede ser un dossier/CV de una persona, un plan de estudios, un temario de asignaturas, o un folleto de un programa académico).
 
-Fragmento:
-{full_text}
+Identifica entre 3 y 6 TEMAS O ÁREAS DE CONOCIMIENTO clave que mejor representen el contenido técnico o académico del documento. Estos temas se usarán para buscar membresías o recursos académicos relacionados, así que deben ser específicos y útiles como término de búsqueda (ej: "bases de datos avanzadas", "ciberseguridad", "inteligencia artificial", "gestión de proyectos tecnológicos"), no genéricos como "educación" o "tecnología".
 
-Área/tema principal:"""
+Responde ÚNICAMENTE con un array JSON de strings, sin texto adicional ni bloques de código. Ejemplo de formato: ["tema 1", "tema 2", "tema 3"]
+
+Fragmento del documento:
+{combined}
+
+Temas clave:"""
 
         response = model.generate_content(
             mini_prompt,
-            generation_config=genai.types.GenerationConfig(temperature=0.2, max_output_tokens=50)
+            generation_config=genai.types.GenerationConfig(temperature=0.2, max_output_tokens=200)
         )
-        detected = response.text.strip().strip('"').strip("'")
-        return detected if detected else None
+        raw = response.text.strip()
+        raw = re.sub(r"```json", "", raw)
+        raw = re.sub(r"```", "", raw).strip()
+
+        try:
+            topics = json.loads(raw)
+            if isinstance(topics, list) and topics:
+                return [str(t).strip() for t in topics if str(t).strip()]
+        except json.JSONDecodeError:
+            match = re.search(r"\[.*\]", raw, re.DOTALL)
+            if match:
+                try:
+                    topics = json.loads(match.group())
+                    if isinstance(topics, list) and topics:
+                        return [str(t).strip() for t in topics if str(t).strip()]
+                except json.JSONDecodeError:
+                    pass
+
+        return None
 
     except Exception:
         return None
@@ -999,23 +1037,31 @@ with btn_col:
     st.markdown("<br>", unsafe_allow_html=True)
     buscar = st.button("🔍 Buscar", use_container_width=True)
 
-with st.expander("📄 O cargar dossier académico en PDF para detectar el tema automáticamente"):
+with st.expander("📄 O cargar un dossier, temario o plan de estudios en PDF para detectar temas automáticamente"):
     pdf_file = st.file_uploader(
-        "Sube un dossier, CV académico o ficha curricular (PDF)",
+        "Sube un dossier académico, CV, temario de asignaturas o folleto de programa (PDF)",
         type=["pdf"],
         key="pdf_dossier_uploader",
-        help="Se extrae solo el texto (sin imágenes) para sugerir el tema de búsqueda — no se envía el PDF completo a Gemini"
+        help="Se extrae solo el texto (sin imágenes) para sugerir temas de búsqueda — no se envía el PDF completo a Gemini"
     )
     if pdf_file is not None:
-        if st.button("🔎 Detectar tema del dossier", key="detect_topic_btn"):
-            with st.spinner("Extrayendo texto del PDF..."):
-                detected_topic = extract_topic_from_pdf(pdf_file)
-            if detected_topic:
-                st.session_state.topic_from_pdf = detected_topic
-                st.success(f"Tema detectado: **{detected_topic}**")
+        if st.button("🔎 Detectar temas del documento", key="detect_topic_btn"):
+            with st.spinner("Analizando el documento..."):
+                detected_topics = extract_topics_from_pdf(pdf_file)
+            if detected_topics:
+                st.session_state.detected_topics = detected_topics
                 st.rerun()
             else:
-                st.warning("No se pudo extraer texto suficiente del PDF. Intenta escribir el tema manualmente.")
+                st.warning("No se pudieron identificar temas claros en este PDF. Intenta escribir el tema manualmente o verifica que el documento tenga texto seleccionable (no sea un escaneo de imagen).")
+
+    if st.session_state.get("detected_topics"):
+        st.markdown("**Temas detectados — selecciona uno para usarlo como búsqueda:**")
+        cols = st.columns(min(3, len(st.session_state.detected_topics)))
+        for i, t in enumerate(st.session_state.detected_topics):
+            with cols[i % len(cols)]:
+                if st.button(f"📌 {t}", key=f"topic_choice_{i}", use_container_width=True):
+                    st.session_state.topic_from_pdf = t
+                    st.rerun()
 
 # ── Session state ─────────────────────────────────────────────────────────────
 if "results" not in st.session_state:
@@ -1024,6 +1070,8 @@ if "last_topic" not in st.session_state:
     st.session_state.last_topic = ""
 if "decisions" not in st.session_state:
     st.session_state.decisions = {}
+if "detected_topics" not in st.session_state:
+    st.session_state.detected_topics = []
 
 
 def do_search():
