@@ -462,7 +462,7 @@ def build_filters_summary():
     return regiones, tipos, condiciones, accesos, keywords
 
 
-def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas=None, use_search=True, expandir_tema=True, buscar_pago=False):
+def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas=None, use_search=True, expandir_tema=True, buscar_pago=False, pdf_topics=None):
     keyword_block = (
         ", ".join(keywords) if keywords
         else "ninguna palabra clave especificada"
@@ -482,6 +482,15 @@ Antes de buscar, genera mentalmente una lista de 5 a 8 sinónimos, términos rel
 Usa TODAS esas variantes como consultas de búsqueda adicionales, no solo el término literal escrito por el usuario. Esto es crítico: muchas organizaciones usan terminología distinta a la del usuario aunque cubran el mismo dominio.
 """
 
+    pdf_topics_block = ""
+    if pdf_topics:
+        ordered_list = chr(10).join(f"{i+1}. {t}" for i, t in enumerate(pdf_topics))
+        pdf_topics_block = f"""
+TEMAS DETECTADOS EN EL DOCUMENTO CARGADO (orden de prioridad, el primero pesa más):
+{ordered_list}
+Usa estos temas como ejes principales de búsqueda, en el orden indicado. El tema #1 debe dominar la mayoría de los resultados; los siguientes se usan para diversificar si el primero no genera suficientes coincidencias. Trátalos con el mismo peso que el tema de búsqueda escrito por el usuario, combinándolos si es necesario.
+"""
+
     if buscar_pago:
         objetivo_costo = "que requieran PAGO (membresías de pago estándar, sin necesidad de que sean gratuitas)"
         regla_costo = "1. Incluye membresías de pago. No es necesario que sean gratuitas ni que tengan condiciones especiales."
@@ -498,7 +507,7 @@ Usa TODAS esas variantes como consultas de búsqueda adicionales, no solo el té
 MODO DE BÚSQUEDA: {search_instruction}
 
 TEMA DE BÚSQUEDA: {topic if topic else "herramientas y recursos académicos generales"}
-{expansion_instruction}
+{expansion_instruction}{pdf_topics_block}
 OBJETIVO: Encuentra exactamente {n} páginas web que ofrezcan membresías académicas o institucionales {objetivo_costo} para el tema indicado y sus variantes semánticas.
 
 REGIONES PRIORITARIAS (busca SOLO en estas):
@@ -610,9 +619,9 @@ def parse_json_results(raw):
     )
 
 
-def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_search=True, expandir_tema=True, buscar_pago=False):
+def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_search=True, expandir_tema=True, buscar_pago=False, pdf_topics=None):
     excluidas = load_existing_memberships()
-    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas, use_search, expandir_tema, buscar_pago)
+    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas, use_search, expandir_tema, buscar_pago, pdf_topics)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
@@ -1053,32 +1062,6 @@ with btn_col:
     st.markdown("<br>", unsafe_allow_html=True)
     buscar = st.button("🔍 Buscar", use_container_width=True)
 
-with st.expander("📄 O cargar un dossier, temario o plan de estudios en PDF para detectar temas automáticamente"):
-    pdf_file = st.file_uploader(
-        "Sube un dossier académico, CV, temario de asignaturas o folleto de programa (PDF)",
-        type=["pdf"],
-        key="pdf_dossier_uploader",
-        help="Se extrae solo el texto (sin imágenes) para sugerir temas de búsqueda — no se envía el PDF completo a Gemini"
-    )
-    if pdf_file is not None:
-        if st.button("🔎 Detectar temas del documento", key="detect_topic_btn"):
-            with st.spinner("Analizando el documento..."):
-                detected_topics, error_msg = extract_topics_from_pdf(pdf_file)
-            if detected_topics:
-                st.session_state.detected_topics = detected_topics
-                st.rerun()
-            else:
-                st.error(f"No se pudieron identificar temas: {error_msg}")
-
-    if st.session_state.get("detected_topics"):
-        st.markdown("**Temas detectados — selecciona uno para usarlo como búsqueda:**")
-        cols = st.columns(min(3, len(st.session_state.detected_topics)))
-        for i, t in enumerate(st.session_state.detected_topics):
-            with cols[i % len(cols)]:
-                if st.button(f"📌 {t}", key=f"topic_choice_{i}", use_container_width=True):
-                    st.session_state.topic_from_pdf = t
-                    st.rerun()
-
 # ── Session state ─────────────────────────────────────────────────────────────
 if "results" not in st.session_state:
     st.session_state.results = None
@@ -1086,8 +1069,29 @@ if "last_topic" not in st.session_state:
     st.session_state.last_topic = ""
 if "decisions" not in st.session_state:
     st.session_state.decisions = {}
-if "detected_topics" not in st.session_state:
-    st.session_state.detected_topics = []
+if "pdf_topics_hidden" not in st.session_state:
+    st.session_state.pdf_topics_hidden = None
+if "trigger_pdf_search" not in st.session_state:
+    st.session_state.trigger_pdf_search = False
+
+with st.expander("📄 O cargar un dossier, temario o plan de estudios en PDF para iniciar la búsqueda automáticamente"):
+    pdf_file = st.file_uploader(
+        "Sube un dossier académico, CV, temario de asignaturas o folleto de programa (PDF)",
+        type=["pdf"],
+        key="pdf_dossier_uploader",
+        help="Se extrae solo el texto (sin imágenes) para detectar temas de búsqueda — no se envía el PDF completo a Gemini"
+    )
+    if pdf_file is not None:
+        if st.button("🔎 Analizar y buscar", key="detect_topic_btn", use_container_width=True):
+            with st.spinner("Analizando el documento..."):
+                detected_topics, error_msg = extract_topics_from_pdf(pdf_file)
+            if detected_topics:
+                st.session_state.pdf_topics_hidden = detected_topics
+                st.session_state.trigger_pdf_search = True
+                st.rerun()
+            else:
+                st.error(f"No se pudieron identificar temas: {error_msg}")
+
 
 
 def do_search():
@@ -1122,7 +1126,8 @@ def do_search():
     """, unsafe_allow_html=True)
 
     try:
-        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, MAX_RESULTS, use_search, expandir_tema, modalidad_costo == "Fase de Negociación")
+        pdf_topics = st.session_state.get("pdf_topics_hidden")
+        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, MAX_RESULTS, use_search, expandir_tema, modalidad_costo == "Fase de Negociación", pdf_topics)
         st.session_state.results = results
         st.session_state.last_topic = topic
         st.session_state.decisions = {}
@@ -1147,7 +1152,8 @@ def do_search():
         """, unsafe_allow_html=True)
 
 
-if buscar:
+if buscar or st.session_state.get("trigger_pdf_search"):
+    st.session_state.trigger_pdf_search = False
     do_search()
 
 # ── Mostrar resultados ────────────────────────────────────────────────────────
