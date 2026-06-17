@@ -404,17 +404,16 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.markdown("### 💳 Modalidad de costo")
+    st.markdown("### 🧭 Modalidad Búsqueda")
     modalidad_costo = st.radio(
         "Modalidad",
-        options=["Buscar membresía con costo", "Costo preferencial"],
+        options=["Fase de Negociación", "Vinculación directa"],
         index=1,
-        label_visibility="collapsed",
-        help="'Costo preferencial' busca membresías gratuitas o con condiciones especiales para el sector académico"
+        label_visibility="collapsed"
     )
 
     # Las 8 condiciones quedan fijas en el prompt, ya no son seleccionables en UI
-    if modalidad_costo == "Costo preferencial":
+    if modalidad_costo == "Vinculación directa":
         cond_total = cond_edu = cond_grant = cond_sandbox = True
         cond_alumni = cond_cert = cond_beta = cond_prueba = True
     else:
@@ -1037,7 +1036,7 @@ def do_search():
     if not regiones:
         st.warning("Selecciona al menos una región en el panel lateral.")
         return
-    if modalidad_costo == "Costo preferencial" and not condiciones:
+    if modalidad_costo == "Vinculación directa" and not condiciones:
         st.warning("Selecciona al menos una condición de costo preferencial.")
         return
 
@@ -1061,7 +1060,7 @@ def do_search():
     """, unsafe_allow_html=True)
 
     try:
-        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, MAX_RESULTS, use_search, expandir_tema, modalidad_costo == "Buscar membresía con costo")
+        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, MAX_RESULTS, use_search, expandir_tema, modalidad_costo == "Fase de Negociación")
         st.session_state.results = results
         st.session_state.last_topic = topic
         st.session_state.decisions = {}
