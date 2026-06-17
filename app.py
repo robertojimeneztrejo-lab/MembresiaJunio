@@ -394,12 +394,10 @@ with st.sidebar:
     st.markdown("### ⭐ Palabras clave prioritarias")
     st.caption("Si aparecen en el nombre, Gemini les dará prioridad")
     keyword_selections = {}
-    for kw in KEYWORD_OPTIONS:
-        keyword_selections[kw] = st.checkbox(kw, value=True)
 
     custom_keyword = st.text_input(
-        "Agregar palabra clave manual (solo esta búsqueda)",
-        placeholder="Ej: Federation, Network, Consortium...",
+        "Agregar palabra clave (solo esta búsqueda)",
+        placeholder="Ej: Association, League, Alliance, Society, Charter, Royal College, Organization...",
         key="custom_keyword_input"
     )
 
