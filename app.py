@@ -317,7 +317,7 @@ def save_to_sheets(results, decisions):
 
         data = json.loads(raw)
         if data.get("status") == "ok":
-            return True, data.get("added", 0)
+            return True, data
         return False, data.get("message", "Error desconocido")
 
     except json.JSONDecodeError:
@@ -1185,11 +1185,12 @@ if st.session_state.results:
             with st.spinner("Guardando en Google Sheets..."):
                 ok, info = save_to_sheets(results, st.session_state.decisions)
             if ok:
-                added = info if isinstance(info, int) else 0
-                if added > 0:
-                    st.success(f"✓ {added} nuevas membresías guardadas con su estatus")
+                added = info.get("added", 0)
+                updated = info.get("updated", 0)
+                if added or updated:
+                    st.success(f"✓ {added} nuevas · {updated} actualizadas")
                 else:
-                    st.info("Todas ya estaban en el Sheet")
+                    st.info("Sin cambios para guardar")
                 st.cache_data.clear()
             else:
                 st.error(f"Error al guardar: {info}")
