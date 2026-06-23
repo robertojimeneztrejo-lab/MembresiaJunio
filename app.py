@@ -477,9 +477,16 @@ def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excl
     expansion_instruction = ""
     if expandir_tema and topic:
         expansion_instruction = f"""
+IDIOMA DE BÚSQUEDA (prioridad absoluta):
+La gran mayoría de asociaciones académicas y profesionales con membresías institucionales operan en inglés. Por ello:
+- Formula TODAS las consultas de búsqueda en inglés, independientemente del idioma en que esté escrito el tema.
+- Si el tema está en español, tradúcelo al inglés antes de buscar. Ejemplo: "software de análisis estadístico" → busca como "statistical analysis software membership", "quantitative research tools academic membership", etc.
+- Solo usa español como idioma de búsqueda si el tema es explícitamente regional (ej. "asociaciones de derecho mexicano").
+- El JSON de respuesta debe seguir en español como siempre.
+
 EXPANSIÓN SEMÁNTICA DEL TEMA (paso obligatorio antes de buscar):
-Antes de buscar, genera mentalmente una lista de 5 a 8 sinónimos, términos relacionados, variantes en inglés/español y subcampos del tema "{topic}". Por ejemplo, si el tema es "gestión de referencias bibliográficas", variantes incluirían: reference management, citation management, bibliografía, manejo de citas, gestores bibliográficos, EndNote alternatives, software de citación académica.
-Usa TODAS esas variantes como consultas de búsqueda adicionales, no solo el término literal escrito por el usuario. Esto es crítico: muchas organizaciones usan terminología distinta a la del usuario aunque cubran el mismo dominio.
+Antes de buscar, traduce el tema al inglés y genera una lista de 5 a 8 sinónimos, términos relacionados y subcampos en inglés para "{topic}". Por ejemplo, si el tema es "gestión de referencias bibliográficas", las consultas de búsqueda serían: "reference management software membership", "citation management academic association", "bibliography tools institutional access", "EndNote alternatives professional society", "academic citation software free institutional membership".
+Usa TODAS esas variantes en inglés como consultas de búsqueda. Esto es crítico: las organizaciones anglófonas dominan el ecosistema de membresías académicas y sus páginas no aparecen en búsquedas en español.
 """
 
     pdf_topics_block = ""
