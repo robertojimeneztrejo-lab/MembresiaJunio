@@ -462,7 +462,7 @@ def build_filters_summary():
     return regiones, tipos, condiciones, accesos, keywords
 
 
-def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas=None, use_search=True, expandir_tema=True, buscar_pago=False, pdf_topics=None):
+def build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas=None, use_search=True, expandir_tema=True, buscar_pago=False, pdf_topics=None, solo_institucional=False):
     keyword_block = (
         ", ".join(keywords) if keywords
         else "ninguna palabra clave especificada"
@@ -495,12 +495,24 @@ Usa estos temas como ejes principales de búsqueda, en el orden indicado. El tem
         objetivo_costo = "que requieran PAGO (membresías de pago estándar, sin necesidad de que sean gratuitas)"
         regla_costo = "1. Incluye membresías de pago. No es necesario que sean gratuitas ni que tengan condiciones especiales."
         condiciones_block = "No aplica filtro de gratuidad — incluye cualquier estructura de precio."
+        regla_institucional_gratis = ""
     else:
         objetivo_costo = "GRATUITAS (sin costo alguno, periodo mínimo 12 meses o 1 año)"
         regla_costo = "1. Solo membresías COMPLETAMENTE GRATUITAS. Excluye cualquier opción de pago."
         condiciones_block = (
             chr(10).join(f"- {c}" for c in condiciones) if condiciones else "- Cualquier condición de gratuidad"
         )
+        if solo_institucional:
+            regla_institucional_gratis = (
+                "\n10. REGLA CRÍTICA — MODO INSTITUCIONAL ESTRICTO: Solo incluye organizaciones que ofrezcan membresía "
+                "INSTITUCIONAL completamente GRATUITA ($0, cero costo) para universidades, instituciones de educación "
+                "superior o consorcios académicos. NO incluyas ninguna organización cuya membresía institucional tenga "
+                "costo, aunque ofrezca descuentos o tarifas reducidas para instituciones educativas. Si una organización "
+                "ofrece membresía gratuita para estudiantes individuales pero cobrada para la institución, EXCLÚYELA. "
+                "El criterio es: la institución universitaria en sí debe poder acceder SIN PAGAR."
+            )
+        else:
+            regla_institucional_gratis = ""
 
     return f"""Eres un agente especializado en inteligencia de recursos académicos y profesionales. Tu función es identificar, evaluar y catalogar plataformas web que ofrecen membresías, suscripciones o accesos institucionales para el sector educativo y de investigación.
 
@@ -538,7 +550,7 @@ REGLAS OBLIGATORIAS:
 7. No incluyas contenido detrás de login previo que no sea descubrible públicamente.
 8. Ordena los resultados de mayor a menor puntuación (5 a 1).
 9. NUNCA repitas las siguientes membresías que ya han sido obtenidas previamente (lista de exclusión):
-{{EXCLUSION_BLOCK}}
+{{EXCLUSION_BLOCK}}{regla_institucional_gratis}
 
 FORMATO DE RESPUESTA: Responde ÚNICAMENTE con un array JSON válido, sin texto adicional, sin bloques de código markdown. El array debe tener exactamente {n} objetos:
 
@@ -619,9 +631,9 @@ def parse_json_results(raw):
     )
 
 
-def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_search=True, expandir_tema=True, buscar_pago=False, pdf_topics=None):
+def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_search=True, expandir_tema=True, buscar_pago=False, pdf_topics=None, solo_institucional=False):
     excluidas = load_existing_memberships()
-    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas, use_search, expandir_tema, buscar_pago, pdf_topics)
+    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas, use_search, expandir_tema, buscar_pago, pdf_topics, solo_institucional)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
@@ -1108,6 +1120,17 @@ def do_search():
 
     use_search = modo_busqueda.startswith("🔴")
 
+    # Flag: activar reglas estrictas de gratuidad institucional solo cuando
+    # el usuario seleccionó ÚNICAMENTE el tipo "Institucional" (los demás desmarcados)
+    solo_institucional = (
+        tipo_institucional and
+        not tipo_corporativa and
+        not tipo_academica and
+        not tipo_estudiantil and
+        not tipo_individual and
+        not tipo_asociado
+    )
+
     st.session_state.is_searching = True
     header_placeholder.markdown(f"""
     <div class="inst-header">
@@ -1127,7 +1150,7 @@ def do_search():
 
     try:
         pdf_topics = st.session_state.get("pdf_topics_hidden")
-        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, MAX_RESULTS, use_search, expandir_tema, modalidad_costo == "Fase de Negociación", pdf_topics)
+        results = run_search(topic, regiones, tipos, condiciones, accesos, keywords, MAX_RESULTS, use_search, expandir_tema, modalidad_costo == "Fase de Negociación", pdf_topics, solo_institucional)
         st.session_state.results = results
         st.session_state.last_topic = topic
         st.session_state.decisions = {}
