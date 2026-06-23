@@ -568,6 +568,7 @@ FORMATO DE RESPUESTA: Responde ÚNICAMENTE con un array JSON válido, sin texto 
     "url": "https://url-directa-a-pagina-de-membresia.com",
     "precio": "Gratis / Gratis con condición específica",
     "condicion_gratuidad": "Tipo específico de gratuidad que aplica",
+    "fuente_precio": "URL exacta o texto literal de la página donde se verificó que la membresía es gratuita. Si no puedes citar una fuente concreta, escribe 'No verificado'.",
     "metodo_acceso": "Método de acceso requerido",
     "beneficios": ["Beneficio 1", "Beneficio 2", "Beneficio 3", "Beneficio 4"],
     "link_membresia": "URL directa al formulario o página para solicitar la membresía",
@@ -638,22 +639,136 @@ def parse_json_results(raw):
     )
 
 
+
+# ── Mejora 1: Filtro post-generación de precios ───────────────────────────────
+PATRONES_COSTO = [
+    r'\$\s*\d+', r'USD\s*\d+', r'€\s*\d+', r'£\s*\d+', r'MXN\s*\d+',
+    r'\d+\s*(USD|EUR|GBP|MXN|CAD)',
+    r'\b\d{2,}\s*(dollars?|euros?|pounds?)\b',
+    r'\bdiscount\b', r'\breduced\s+fee\b', r'\bsubsidized\b',
+    r'\bpaid\b', r'\bfee\s+waiver\b',
+    r'\d+%\s+off', r'save\s+\d+',
+]
+
+def filter_paid_results(results, buscar_pago):
+    """Descarta resultados cuyo precio o condicion_gratuidad delatan un costo real."""
+    if buscar_pago:
+        return results, []
+
+    kept, rejected = [], []
+    for r in results:
+        campos = " ".join([
+            str(r.get("precio", "")),
+            str(r.get("condicion_gratuidad", "")),
+            str(r.get("fuente_precio", "")),
+        ]).lower()
+
+        flagged = any(re.search(p, campos, re.IGNORECASE) for p in PATRONES_COSTO)
+
+        # "No verificado" en fuente_precio no descarta, pero baja la puntuación
+        if r.get("fuente_precio", "").strip().lower() in ("no verificado", "sin verificar", ""):
+            r["puntuacion"] = max(1, r.get("puntuacion", 3) - 1)
+            r["_aviso_fuente"] = True
+
+        if flagged:
+            r["_rechazado_por_precio"] = True
+            rejected.append(r)
+        else:
+            kept.append(r)
+
+    return kept, rejected
+
+
+# ── Mejora 2: Auditoría de segunda fase ──────────────────────────────────────
+def build_audit_prompt(candidatos):
+    lista = "\n".join(
+        f"{i+1}. {r.get('nombre','?')} | precio: \"{r.get('precio','')}\" | "
+        f"condicion: \"{r.get('condicion_gratuidad','')}\" | fuente: \"{r.get('fuente_precio','')}\" | "
+        f"tipo: \"{r.get('tipo_membresia','')}\" | url: {r.get('url','')}"
+        for i, r in enumerate(candidatos)
+    )
+    return f"""Eres un auditor de membresías académicas. Tu única tarea es verificar si cada membresía listada es REALMENTE gratuita ($0, sin ningún costo) para universidades o estudiantes.
+
+LISTA A AUDITAR:
+{lista}
+
+CRITERIOS DE RECHAZO (marca como false si alguno aplica):
+- La membresía institucional tiene cualquier costo, aunque sea reducido
+- La gratuidad es solo para estudiantes individuales, NO para la institución
+- La fuente de precio dice "No verificado" o no existe evidencia concreta
+- El precio menciona descuentos, tarifas reducidas o porcentajes de ahorro
+- La gratuidad es un trial o prueba de menos de 12 meses
+
+Responde ÚNICAMENTE con un array JSON. Un objeto por membresía, en el mismo orden:
+[
+  {{
+    "nombre": "nombre de la membresía",
+    "es_gratuita": true,
+    "razon": "Explicación breve de por qué es gratuita o no (1 línea)"
+  }}
+]"""
+
+
+def audit_results(candidatos, use_search):
+    """Segunda llamada a Gemini para auditar si los candidatos son realmente gratuitos."""
+    if not candidatos:
+        return candidatos
+
+    prompt = build_audit_prompt(candidatos)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    gen_config = genai.types.GenerationConfig(temperature=0.1, max_output_tokens=2048)
+
+    try:
+        if use_search:
+            response = model.generate_content(
+                prompt, generation_config=gen_config,
+                tools=[{"google_search": {}}]
+            )
+        else:
+            response = model.generate_content(prompt, generation_config=gen_config)
+    except Exception:
+        response = model.generate_content(prompt, generation_config=gen_config)
+
+    try:
+        raw = response.text.strip()
+        raw_clean = re.sub(r"```json|```", "", raw).strip()
+        auditoria = json.loads(raw_clean)
+    except Exception:
+        # Si la auditoría falla, devuelve los candidatos sin modificar
+        return candidatos
+
+    # Marcar resultados que no pasaron la auditoría
+    auditados = []
+    for i, r in enumerate(candidatos):
+        veredicto = auditoria[i] if i < len(auditoria) else {}
+        if veredicto.get("es_gratuita", True):
+            r["_auditoria_ok"] = True
+            r["_razon_auditoria"] = veredicto.get("razon", "")
+            auditados.append(r)
+        else:
+            r["_rechazado_auditoria"] = True
+            r["_razon_auditoria"] = veredicto.get("razon", "No confirmada como gratuita")
+            # No se agrega a auditados → queda descartado
+
+    return auditados
+
+
 def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_search=True, expandir_tema=True, buscar_pago=False, pdf_topics=None, solo_institucional=False):
     excluidas = load_existing_memberships()
-    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n, excluidas, use_search, expandir_tema, buscar_pago, pdf_topics, solo_institucional)
+
+    # Pedimos resultados extra como buffer para compensar los que filtro/auditoría descarten
+    n_fetch = n + 3 if not buscar_pago else n
+
+    prompt = build_prompt(topic, regiones, tipos, condiciones, accesos, keywords, n_fetch, excluidas, use_search, expandir_tema, buscar_pago, pdf_topics, solo_institucional)
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
-    needed_tokens = max(8192, n * 600 + 2000)
+    needed_tokens = max(8192, n_fetch * 650 + 2000)
 
     gen_config = genai.types.GenerationConfig(
-        temperature=0.3,
+        temperature=0.1,
         max_output_tokens=needed_tokens
     )
-
-    tools = None
-    if use_search:
-        tools = "google_search_retrieval"
 
     try:
         if use_search:
@@ -665,7 +780,6 @@ def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_se
         else:
             response = model.generate_content(prompt, generation_config=gen_config)
     except Exception:
-        # Fallback sin tools si el modelo/SDK no soporta google_search en esta versión
         response = model.generate_content(prompt, generation_config=gen_config)
 
     raw = response.text.strip()
@@ -677,6 +791,29 @@ def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_se
         pass
 
     results = parse_json_results(raw)
+
+    # ── Mejora 1: Filtro post-generación ─────────────────────────────────────
+    if not buscar_pago:
+        results, rechazados_filtro = filter_paid_results(results, buscar_pago)
+        if rechazados_filtro:
+            st.session_state["_rechazados_filtro"] = len(rechazados_filtro)
+        else:
+            st.session_state.pop("_rechazados_filtro", None)
+    else:
+        st.session_state.pop("_rechazados_filtro", None)
+
+    # ── Mejora 2: Auditoría de segunda fase ───────────────────────────────────
+    if not buscar_pago and results:
+        with st.spinner("🔍 Auditando gratuidad de resultados..."):
+            results = audit_results(results, use_search)
+        rechazados_auditoria = [r for r in results if r.get("_rechazado_auditoria")]
+        if rechazados_auditoria:
+            st.session_state["_rechazados_auditoria"] = len(rechazados_auditoria)
+        else:
+            st.session_state.pop("_rechazados_auditoria", None)
+
+    # Recortar al número solicitado por el usuario
+    results = results[:n]
 
     if finish == "MAX_TOKENS" and len(results) < n:
         st.session_state["truncated_warning"] = (
@@ -763,6 +900,11 @@ def render_results(results):
             <div class="card-text">{precio}</div>
             <div class="card-section-title">Condición de gratuidad</div>
             <div class="card-text">{r.get("condicion_gratuidad","")}</div>
+            <div class="card-section-title">Fuente verificada del precio</div>
+            <div class="card-text">
+                {"<span style='color:#7B1E1E;font-weight:600;'>⚠ Sin fuente concreta — verificar manualmente</span>" if r.get("_aviso_fuente") else f'<a href="{r.get("fuente_precio","")}" target="_blank">{r.get("fuente_precio","No disponible")}</a>' if r.get("fuente_precio","").startswith("http") else r.get("fuente_precio","No disponible")}
+            </div>
+            {"<div style='background:#E8F5EE;border:1px solid #A9D6BC;border-radius:5px;padding:0.4rem 0.8rem;margin-top:0.5rem;font-size:0.78rem;color:#1A5232;'><strong>✓ Auditoría:</strong> " + r.get("_razon_auditoria","") + "</div>" if r.get("_auditoria_ok") and r.get("_razon_auditoria") else ""}
             <div class="card-section-title">Método de acceso</div>
             <div class="card-text">{r.get("metodo_acceso","")}</div>
             <div class="card-section-title">Beneficios principales</div>
@@ -1227,6 +1369,17 @@ if st.session_state.results:
 
     if st.session_state.get("truncated_warning"):
         st.warning(st.session_state["truncated_warning"])
+
+    # Resumen de descartados por filtro y auditoría
+    rechazados_f = st.session_state.get("_rechazados_filtro", 0)
+    rechazados_a = st.session_state.get("_rechazados_auditoria", 0)
+    if rechazados_f or rechazados_a:
+        partes = []
+        if rechazados_f:
+            partes.append(f"**{rechazados_f}** descartadas por patrón de precio")
+        if rechazados_a:
+            partes.append(f"**{rechazados_a}** descartadas por auditoría de gratuidad")
+        st.info(f"🛡️ Filtros de calidad activos — {' · '.join(partes)}. Solo se muestran membresías confirmadas como gratuitas.")
 
     render_results(results)
 
