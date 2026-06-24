@@ -885,9 +885,6 @@ def render_results(results):
             <div class="card-text">{precio}</div>
             <div class="card-section-title">Condición de gratuidad</div>
             <div class="card-text">{condicion}</div>
-            <div class="card-section-title">Fuente verificada del precio</div>
-            <div class="card-text">{fuente_html}</div>
-            {auditoria_html}
             <div class="card-section-title">Método de acceso</div>
             <div class="card-text">{metodo}</div>
             <div class="card-section-title">Beneficios principales</div>
