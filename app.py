@@ -521,32 +521,37 @@ Usa estos temas como ejes principales de búsqueda, en el orden indicado. El tem
         else:
             regla_institucional_gratis = ""
 
-    return f"""You are a research specialist in academic associations and professional societies. Your task is to find websites of associations that offer FREE institutional or student memberships.
+    regiones_str = ", ".join(regiones) if regiones else "North America, Europe, Latin America, Global"
+    tipos_str = ", ".join(tipos) if tipos else "Institutional, Academic, Student"
 
-SEARCH TASK:
-Find exactly {n} associations or professional societies related to "{topic if topic else "academic and research tools"}" that offer FREE membership (no cost, $0) for universities, higher education institutions, or students.
+    return f"""You are a research specialist in academic associations and professional societies. Find websites of associations offering FREE memberships for universities or students.
+
+TOPIC: "{topic if topic else "academic and research tools"}"
+PREFERRED REGIONS: {regiones_str}
+MEMBERSHIP TYPES: {tipos_str}
 {expansion_instruction}{pdf_topics_block}
-SEARCH QUERIES TO USE (run all of these in Google Search):
-- "{topic} association free institutional membership"
-- "{topic} professional society free university membership"
-- "{topic} academic association student membership free"
-- "{topic} society complimentary institutional access"
-- "{topic} association free membership higher education"
+TASK: Find exactly {n} different associations or professional societies related to the topic above that offer FREE membership ($0, no cost) for universities, higher education institutions, or students. Be generous — if an association offers free membership to ANY academic category (institution, student, faculty, researcher), include it.
 
-WHAT TO LOOK FOR:
-- Associations, societies, leagues, or federations with a membership program
-- The membership must be explicitly FREE ($0) for universities or students
-- Membership must last at least 12 months
-- Prefer lesser-known associations over large well-known ones
-- Include associations from: North America, Europe, Latin America, or Global scope
+SEARCH QUERIES — run ALL of these:
+1. "{topic} association free institutional membership site:.org"
+2. "{topic} professional society free university membership"
+3. "{topic} academic association student membership free"
+4. "{topic} society complimentary higher education access"
+5. "{topic} network free membership scholars researchers"
+6. "{topic} federation free academic institution membership"
 
-WHAT TO EXCLUDE:
-- Associations where the free option is only a trial or less than 12 months
-- Associations that only offer discounts (e.g. "50% off") — must be fully free
-- UN, UNESCO, IMF, World Bank, WHO and similar multilateral bodies
-- Repeat associations (already found): {", ".join(excluidas) if excluidas else "none yet"}
+INCLUDE if:
+- The association offers free ($0) membership for universities, students, faculty, or researchers
+- Membership lasts at least 12 months (or is open-ended)
+- The association is real and has a public website
 
-For each association found, fill the following JSON. Respond ONLY with a valid JSON array, no markdown, no extra text:
+EXCLUDE only:
+- Associations that offer only discounts (e.g. "50% off") with no free tier
+- Free trials shorter than 12 months
+- UN, UNESCO, IMF, World Bank, WHO and similar intergovernmental bodies
+- Already found: {", ".join(excluidas) if excluidas else "none"}
+
+Respond ONLY with a valid JSON array, no markdown, no extra text:
 
 [
   {{
@@ -555,7 +560,7 @@ For each association found, fill the following JSON. Respond ONLY with a valid J
     "url": "https://direct-link-to-membership-page.com",
     "precio": "Free / Free for institutions / Free for students",
     "condicion_gratuidad": "Specific condition: e.g. requires .edu email, institutional sign-up, student verification",
-    "fuente_precio": "Exact URL or text from their website confirming it is free. Write 'Not verified' if unsure.",
+    "fuente_precio": "Exact URL or quote from their website confirming it is free. Write 'Not verified' if unsure.",
     "metodo_acceso": "How to access: .edu email, IP whitelist, institutional registration form, etc.",
     "beneficios": ["Benefit 1", "Benefit 2", "Benefit 3", "Benefit 4"],
     "link_membresia": "Direct URL to the membership form or application page",
@@ -865,7 +870,20 @@ def render_results(results):
         elif decision["estatus"] == "Rechazado":
             card_class += " rejected"
 
-        st.markdown(f"""
+            fuente = r.get("fuente_precio", "") or ""
+            if r.get("_aviso_fuente") or not fuente or fuente.lower() in ("no verificado", "sin verificar", "not verified"):
+                fuente_html = "<span style='color:#C8973A;font-weight:600;'>⚠ Sin fuente concreta — verificar manualmente</span>"
+            elif fuente.startswith("http"):
+                fuente_html = f'<a href="{fuente}" target="_blank">{fuente}</a>'
+            else:
+                fuente_html = fuente
+
+            auditoria_html = ""
+            if r.get("_auditoria_ok") and r.get("_razon_auditoria"):
+                razon = r.get("_razon_auditoria", "")
+                auditoria_html = f"<div style='background:#E8F5EE;border:1px solid #A9D6BC;border-radius:5px;padding:0.4rem 0.8rem;margin-top:0.5rem;font-size:0.78rem;color:#1A5232;'><strong>✓ Auditoría:</strong> {razon}</div>"
+
+            st.markdown(f"""
         <div class="{card_class}">
             <div class="card-title">#{i+1} — {nombre} {ver_html} {priority_html}</div>
             <div class="card-url"><a href="{url}" target="_blank">{url}</a></div>
@@ -882,10 +900,8 @@ def render_results(results):
             <div class="card-section-title">Condición de gratuidad</div>
             <div class="card-text">{r.get("condicion_gratuidad","")}</div>
             <div class="card-section-title">Fuente verificada del precio</div>
-            <div class="card-text">
-                {"<span style='color:#7B1E1E;font-weight:600;'>⚠ Sin fuente concreta — verificar manualmente</span>" if r.get("_aviso_fuente") else f'<a href="{r.get("fuente_precio","")}" target="_blank">{r.get("fuente_precio","No disponible")}</a>' if r.get("fuente_precio","").startswith("http") else r.get("fuente_precio","No disponible")}
-            </div>
-            {"<div style='background:#E8F5EE;border:1px solid #A9D6BC;border-radius:5px;padding:0.4rem 0.8rem;margin-top:0.5rem;font-size:0.78rem;color:#1A5232;'><strong>✓ Auditoría:</strong> " + r.get("_razon_auditoria","") + "</div>" if r.get("_auditoria_ok") and r.get("_razon_auditoria") else ""}
+            <div class="card-text">{fuente_html}</div>
+            {auditoria_html}
             <div class="card-section-title">Método de acceso</div>
             <div class="card-text">{r.get("metodo_acceso","")}</div>
             <div class="card-section-title">Beneficios principales</div>
