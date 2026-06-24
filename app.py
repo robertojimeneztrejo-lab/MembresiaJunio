@@ -509,17 +509,7 @@ Usa estos temas como ejes principales de búsqueda, en el orden indicado. El tem
         condiciones_block = (
             chr(10).join(f"- {c}" for c in condiciones) if condiciones else "- Cualquier condición de gratuidad"
         )
-        if solo_institucional:
-            regla_institucional_gratis = (
-                "\n10. REGLA CRÍTICA — MODO INSTITUCIONAL ESTRICTO: Solo incluye organizaciones que ofrezcan membresía "
-                "INSTITUCIONAL completamente GRATUITA ($0, cero costo) para universidades, instituciones de educación "
-                "superior o consorcios académicos. NO incluyas ninguna organización cuya membresía institucional tenga "
-                "costo, aunque ofrezca descuentos o tarifas reducidas para instituciones educativas. Si una organización "
-                "ofrece membresía gratuita para estudiantes individuales pero cobrada para la institución, EXCLÚYELA. "
-                "El criterio es: la institución universitaria en sí debe poder acceder SIN PAGAR."
-            )
-        else:
-            regla_institucional_gratis = ""
+        regla_institucional_gratis = ""
 
     regiones_str = ", ".join(regiones) if regiones else "North America, Europe, Latin America, Global"
     tipos_str = ", ".join(tipos) if tipos else "Institutional, Academic, Student"
@@ -784,15 +774,8 @@ def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_se
 
     results = parse_json_results(raw)
 
-    # ── Mejora 1: Filtro post-generación ─────────────────────────────────────
-    if not buscar_pago:
-        results, rechazados_filtro = filter_paid_results(results, buscar_pago)
-        if rechazados_filtro:
-            st.session_state["_rechazados_filtro"] = len(rechazados_filtro)
-        else:
-            st.session_state.pop("_rechazados_filtro", None)
-    else:
-        st.session_state.pop("_rechazados_filtro", None)
+    # Filtro de precio desactivado — el prompt en inglés ya es suficientemente específico
+    st.session_state.pop("_rechazados_filtro", None)
 
     # ── Mejora 2: Auditoría de segunda fase (desactivada — el filtro regex es suficiente) ──
     # audit_results se mantiene disponible pero no se ejecuta para no sobre-filtrar
