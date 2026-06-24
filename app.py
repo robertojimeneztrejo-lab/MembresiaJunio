@@ -539,7 +539,7 @@ EXCLUDE only:
 - Associations that offer only discounts (e.g. "50% off") with no free tier
 - Free trials shorter than 12 months
 - UN, UNESCO, IMF, World Bank, WHO and similar intergovernmental bodies
-- Already found: {", ".join(excluidas) if excluidas else "none"}
+- Already found: {len(excluidas)} associations already in the database (search for NEW ones not commonly known)
 
 Respond ONLY with a valid JSON array, no markdown, no extra text:
 
@@ -773,6 +773,11 @@ def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_se
         pass
 
     results = parse_json_results(raw)
+
+    # Deduplicación en Python — más eficiente que pasar 616 nombres al prompt
+    if excluidas:
+        excluidas_lower = {e.lower().strip() for e in excluidas}
+        results = [r for r in results if r.get("nombre", "").lower().strip() not in excluidas_lower]
 
     # Filtro de precio desactivado — el prompt en inglés ya es suficientemente específico
     st.session_state.pop("_rechazados_filtro", None)
