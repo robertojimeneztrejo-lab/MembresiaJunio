@@ -521,66 +521,53 @@ Usa estos temas como ejes principales de búsqueda, en el orden indicado. El tem
         else:
             regla_institucional_gratis = ""
 
-    return f"""Eres un agente especializado en inteligencia de recursos académicos y profesionales. Tu función es identificar, evaluar y catalogar plataformas web que ofrecen membresías, suscripciones o accesos institucionales para el sector educativo y de investigación.
+    return f"""You are a research specialist in academic associations and professional societies. Your task is to find websites of associations that offer FREE institutional or student memberships.
 
-MODO DE BÚSQUEDA: {search_instruction}
-
-TEMA DE BÚSQUEDA: {topic if topic else "herramientas y recursos académicos generales"}
+SEARCH TASK:
+Find exactly {n} associations or professional societies related to "{topic if topic else "academic and research tools"}" that offer FREE membership (no cost, $0) for universities, higher education institutions, or students.
 {expansion_instruction}{pdf_topics_block}
-OBJETIVO: Encuentra exactamente {n} páginas web que ofrezcan membresías académicas o institucionales {objetivo_costo} para el tema indicado y sus variantes semánticas.
+SEARCH QUERIES TO USE (run all of these in Google Search):
+- "{topic} association free institutional membership"
+- "{topic} professional society free university membership"
+- "{topic} academic association student membership free"
+- "{topic} society complimentary institutional access"
+- "{topic} association free membership higher education"
 
-REGIONES PRIORITARIAS (busca SOLO en estas):
-{chr(10).join(f"- {r}" for r in regiones) if regiones else "- Sin filtro regional"}
+WHAT TO LOOK FOR:
+- Associations, societies, leagues, or federations with a membership program
+- The membership must be explicitly FREE ($0) for universities or students
+- Membership must last at least 12 months
+- Prefer lesser-known associations over large well-known ones
+- Include associations from: North America, Europe, Latin America, or Global scope
 
-TIPOS DE MEMBRESÍA A BUSCAR:
-{chr(10).join(f"- {t}" for t in tipos) if tipos else "- Todos los tipos"}
+WHAT TO EXCLUDE:
+- Associations where the free option is only a trial or less than 12 months
+- Associations that only offer discounts (e.g. "50% off") — must be fully free
+- UN, UNESCO, IMF, World Bank, WHO and similar multilateral bodies
+- Repeat associations (already found): {", ".join(excluidas) if excluidas else "none yet"}
 
-CONDICIONES ACEPTABLES:
-{condiciones_block}
-
-MÉTODOS DE ACCESO ACEPTABLES (siempre se consideran todos):
-- SSO Institucional o IP Whitelisting
-- Dominio .edu verificado
-- Invitación o aprobación previa
-- Cuenta personal con validación de perfil
-
-PALABRAS CLAVE DE PRIORIDAD: Si el nombre oficial de la organización contiene alguna de estas palabras, dale prioridad y aumenta su puntuación (suelen ser asociaciones, ligas, alianzas o colegios profesionales con mayor probabilidad de ofrecer membresías institucionales):
-{keyword_block}
-
-REGLAS OBLIGATORIAS:
-{regla_costo}
-2. El período de acceso debe ser de 12 meses o 1 año como mínimo.
-3. Excluye plataformas de: Asia Oriental/Pacífico, Asia del Sur/Central, África, Medio Oriente.
-4. Excluye organismos multilaterales: ONU, UNESCO, FMI, BM, OCDE, OMS, OEA y equivalentes.
-5. Prioriza plataformas con poca visibilidad sobre las ampliamente conocidas, y prioriza aquellas cuyo nombre contenga las palabras clave indicadas.
-6. Nunca inventes URLs. Si no puedes verificar un dato, usa "Sin verificar".
-7. No incluyas contenido detrás de login previo que no sea descubrible públicamente.
-8. Ordena los resultados de mayor a menor puntuación (5 a 1).
-9. NUNCA repitas las siguientes membresías que ya han sido obtenidas previamente (lista de exclusión):
-{{EXCLUSION_BLOCK}}{regla_institucional_gratis}
-
-FORMATO DE RESPUESTA: Responde ÚNICAMENTE con un array JSON válido, sin texto adicional, sin bloques de código markdown. El array debe tener exactamente {n} objetos:
+For each association found, fill the following JSON. Respond ONLY with a valid JSON array, no markdown, no extra text:
 
 [
   {{
-    "nombre": "Nombre oficial de la organización",
-    "descripcion": "2-3 líneas explicando de qué trata la asociación/organización y a qué se dedica",
-    "url": "https://url-directa-a-pagina-de-membresia.com",
-    "precio": "Gratis / Gratis con condición específica",
-    "condicion_gratuidad": "Tipo específico de gratuidad que aplica",
-    "fuente_precio": "URL exacta o texto literal de la página donde se verificó que la membresía es gratuita. Si no puedes citar una fuente concreta, escribe 'No verificado'.",
-    "metodo_acceso": "Método de acceso requerido",
-    "beneficios": ["Beneficio 1", "Beneficio 2", "Beneficio 3", "Beneficio 4"],
-    "link_membresia": "URL directa al formulario o página para solicitar la membresía",
-    "correo_contacto": "Correo de contacto si está disponible públicamente, o 'No disponible'",
-    "tipo_membresia": "Institucional|Corporativa|Académica/Docente|Estudiantil|Individual Profesional|Asociado/Afiliado",
+    "nombre": "Official name of the association",
+    "descripcion": "2-3 sentences describing what the association does and who it serves",
+    "url": "https://direct-link-to-membership-page.com",
+    "precio": "Free / Free for institutions / Free for students",
+    "condicion_gratuidad": "Specific condition: e.g. requires .edu email, institutional sign-up, student verification",
+    "fuente_precio": "Exact URL or text from their website confirming it is free. Write 'Not verified' if unsure.",
+    "metodo_acceso": "How to access: .edu email, IP whitelist, institutional registration form, etc.",
+    "beneficios": ["Benefit 1", "Benefit 2", "Benefit 3", "Benefit 4"],
+    "link_membresia": "Direct URL to the membership form or application page",
+    "correo_contacto": "Contact email if publicly available, or 'Not available'",
+    "tipo_membresia": "Institucional|Académica/Docente|Estudiantil|Individual Profesional",
     "region": "Norteamérica|Europa|América Latina|Global",
     "puntuacion": 4,
     "url_verificada": true,
-    "duracion": "12 meses / 1 año / Indefinida mientras seas estudiante",
+    "duracion": "12 months / 1 year / Indefinite while enrolled",
     "contiene_palabra_clave": true
   }}
-]""".replace("{{EXCLUSION_BLOCK}}", ("\n".join(f"- {e}" for e in excluidas) if excluidas else "ninguna por ahora"))
+]"""
 
 
 def clean_json_string(raw):
@@ -802,15 +789,9 @@ def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_se
     else:
         st.session_state.pop("_rechazados_filtro", None)
 
-    # ── Mejora 2: Auditoría de segunda fase ───────────────────────────────────
-    if not buscar_pago and results:
-        with st.spinner("🔍 Auditando gratuidad de resultados..."):
-            results = audit_results(results, use_search)
-        rechazados_auditoria = [r for r in results if r.get("_rechazado_auditoria")]
-        if rechazados_auditoria:
-            st.session_state["_rechazados_auditoria"] = len(rechazados_auditoria)
-        else:
-            st.session_state.pop("_rechazados_auditoria", None)
+    # ── Mejora 2: Auditoría de segunda fase (desactivada — el filtro regex es suficiente) ──
+    # audit_results se mantiene disponible pero no se ejecuta para no sobre-filtrar
+    st.session_state.pop("_rechazados_auditoria", None)
 
     # Recortar al número solicitado por el usuario
     results = results[:n]
