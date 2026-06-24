@@ -839,11 +839,13 @@ def render_results(results):
 
         url            = r.get("url", "#")
         nombre         = r.get("nombre", "Sin nombre")
-        descripcion    = r.get("descripcion", "")
-        precio         = r.get("precio", "Gratis")
+        descripcion    = r.get("descripcion", "").replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
+        precio         = r.get("precio", "Gratis").replace('"', '&quot;')
         link_membresia = r.get("link_membresia", url)
         correo_default = r.get("correo_contacto", "")
-        bene_html      = "".join(f"<li>{b}</li>" for b in r.get("beneficios", []))
+        condicion      = r.get("condicion_gratuidad", "").replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
+        metodo         = r.get("metodo_acceso", "").replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
+        bene_html      = "".join(f"<li>{str(b).replace('<','&lt;').replace('>','&gt;')}</li>" for b in r.get("beneficios", []))
 
         decision = st.session_state.decisions.get(i, {"estatus": "Pendiente", "correo": correo_default})
 
@@ -854,12 +856,13 @@ def render_results(results):
             card_class += " rejected"
 
         fuente = r.get("fuente_precio", "") or ""
+        fuente_escaped = fuente.replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
         if r.get("_aviso_fuente") or not fuente or fuente.lower() in ("no verificado", "sin verificar", "not verified"):
             fuente_html = "<span style='color:#C8973A;font-weight:600;'>⚠ Sin fuente concreta — verificar manualmente</span>"
         elif fuente.startswith("http"):
-            fuente_html = f'<a href="{fuente}" target="_blank">{fuente}</a>'
+            fuente_html = f'<a href="{fuente_escaped}" target="_blank">{fuente_escaped}</a>'
         else:
-            fuente_html = fuente
+            fuente_html = fuente_escaped
 
         auditoria_html = ""
         if r.get("_auditoria_ok") and r.get("_razon_auditoria"):
@@ -881,12 +884,12 @@ def render_results(results):
             <div class="card-section-title">Precio</div>
             <div class="card-text">{precio}</div>
             <div class="card-section-title">Condición de gratuidad</div>
-            <div class="card-text">{r.get("condicion_gratuidad","")}</div>
+            <div class="card-text">{condicion}</div>
             <div class="card-section-title">Fuente verificada del precio</div>
             <div class="card-text">{fuente_html}</div>
             {auditoria_html}
             <div class="card-section-title">Método de acceso</div>
-            <div class="card-text">{r.get("metodo_acceso","")}</div>
+            <div class="card-text">{metodo}</div>
             <div class="card-section-title">Beneficios principales</div>
             <div class="card-text"><ul style="margin:0;padding-left:1.2rem;">{bene_html}</ul></div>
             <div class="card-section-title">Solicitar membresía</div>
