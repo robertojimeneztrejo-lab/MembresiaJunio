@@ -289,7 +289,7 @@ def save_to_sheets(results, decisions):
                 continue
             decision = decisions.get(idx, {})
             estatus = decision.get("estatus", "Pendiente")
-            correo = decision.get("correo", "").strip() if estatus == "Aprobado" else ""
+            correo = decision.get("correo", "").strip()
 
             payload.append({
                 "nombre": nombre,
@@ -853,20 +853,20 @@ def render_results(results):
         elif decision["estatus"] == "Rechazado":
             card_class += " rejected"
 
-            fuente = r.get("fuente_precio", "") or ""
-            if r.get("_aviso_fuente") or not fuente or fuente.lower() in ("no verificado", "sin verificar", "not verified"):
-                fuente_html = "<span style='color:#C8973A;font-weight:600;'>⚠ Sin fuente concreta — verificar manualmente</span>"
-            elif fuente.startswith("http"):
-                fuente_html = f'<a href="{fuente}" target="_blank">{fuente}</a>'
-            else:
-                fuente_html = fuente
+        fuente = r.get("fuente_precio", "") or ""
+        if r.get("_aviso_fuente") or not fuente or fuente.lower() in ("no verificado", "sin verificar", "not verified"):
+            fuente_html = "<span style='color:#C8973A;font-weight:600;'>⚠ Sin fuente concreta — verificar manualmente</span>"
+        elif fuente.startswith("http"):
+            fuente_html = f'<a href="{fuente}" target="_blank">{fuente}</a>'
+        else:
+            fuente_html = fuente
 
-            auditoria_html = ""
-            if r.get("_auditoria_ok") and r.get("_razon_auditoria"):
-                razon = r.get("_razon_auditoria", "")
-                auditoria_html = f"<div style='background:#E8F5EE;border:1px solid #A9D6BC;border-radius:5px;padding:0.4rem 0.8rem;margin-top:0.5rem;font-size:0.78rem;color:#1A5232;'><strong>✓ Auditoría:</strong> {razon}</div>"
+        auditoria_html = ""
+        if r.get("_auditoria_ok") and r.get("_razon_auditoria"):
+            razon = r.get("_razon_auditoria", "")
+            auditoria_html = f"<div style='background:#E8F5EE;border:1px solid #A9D6BC;border-radius:5px;padding:0.4rem 0.8rem;margin-top:0.5rem;font-size:0.78rem;color:#1A5232;'><strong>✓ Auditoría:</strong> {razon}</div>"
 
-            st.markdown(f"""
+        st.markdown(f"""
         <div class="{card_class}">
             <div class="card-title">#{i+1} — {nombre} {ver_html} {priority_html}</div>
             <div class="card-url"><a href="{url}" target="_blank">{url}</a></div>
