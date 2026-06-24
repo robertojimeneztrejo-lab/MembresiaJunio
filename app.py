@@ -745,7 +745,7 @@ def run_search(topic, regiones, tipos, condiciones, accesos, keywords, n, use_se
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
-    needed_tokens = max(8192, n_fetch * 650 + 2000)
+    needed_tokens = max(8192, n_fetch * 1200 + 3000)
 
     gen_config = genai.types.GenerationConfig(
         temperature=0.1,
